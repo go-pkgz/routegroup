@@ -1,7 +1,7 @@
 package routegroup_test
 
 import (
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -150,7 +150,7 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 		})
 	})
 
-	group.Handle("/test", func(w http.ResponseWriter, r *http.Request) {
+	group.Handle("/test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("test handler"))
 	})
 
@@ -161,7 +161,7 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 	assert.NoError(t, err)
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 
 	assert.Equal(t, "test handler", string(body))
@@ -174,7 +174,7 @@ func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 
 	group.Use(testMiddleware)
 
-	group.Handle("GET /test", func(w http.ResponseWriter, r *http.Request) {
+	group.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("GET method handler"))
 	})
 
@@ -185,7 +185,7 @@ func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 	assert.NoError(t, err)
 	defer resp.Body.Close()
 
-	body, err := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
 	assert.NoError(t, err)
 
 	assert.Equal(t, "GET method handler", string(body))
