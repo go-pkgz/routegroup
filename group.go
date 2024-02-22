@@ -1,4 +1,5 @@
-// Package routegroup provides a way to group routes and apply middleware to them. Works with the standard library's http.ServeMux.
+// Package routegroup provides a way to group routes and applies middleware to them.
+// Works with the standard library's http.ServeMux.
 package routegroup
 
 import "net/http"
