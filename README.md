@@ -93,7 +93,7 @@ func main() {
 You can also apply middleware to specific routes:
 
 ```go
-    apiGroup.With(corsMiddleware, helloHandler).Handle("GET /hello", loggingMiddleware)
+    apiGroup.With(corsMiddleware, helloHandler).Handle("GET /hello", helloHandler)
 ```
 
 *Alternative Usage with `Set`*
