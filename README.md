@@ -97,8 +97,8 @@ You can also use the `Set` method to add routes and middleware:
     mux := http.NewServeMux()
 	group := routegroup.New(mux)
 	group.Set(b func(*routegroup.Bundle) {
-        b.Use(loggingMiddleware, corsMiddleware)
-        b.Handle("GET /hello", helloHandler)
+		b.Use(loggingMiddleware, corsMiddleware)
+		b.Handle("GET /hello", helloHandler)
 		b.Handle("GET /bye", byeHandler)
     })
     http.ListenAndServe(":8080", mux)
