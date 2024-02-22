@@ -170,26 +170,40 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 
 func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.Mount(mux, "/api")
 
 	group.Use(testMiddleware)
 
 	group.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("GET method handler"))
+		_, _ = w.Write([]byte("GET test method handler"))
+	})
+
+	group.Handle("/test2", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("test2 method handler"))
 	})
 
 	testServer := httptest.NewServer(mux)
 	defer testServer.Close()
 
-	resp, err := http.Get(testServer.URL + "/test")
-	assert.NoError(t, err)
-	defer resp.Body.Close()
+	t.Run("handle with verb", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/api/test")
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, "GET test method handler", string(body))
+		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+	})
 
-	body, err := io.ReadAll(resp.Body)
-	assert.NoError(t, err)
-
-	assert.Equal(t, "GET method handler", string(body))
-	assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+	t.Run("handle without verb", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/api/test2")
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, "test2 method handler", string(body))
+		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+	})
 }
 
 func ExampleNew() {
