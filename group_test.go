@@ -62,7 +62,7 @@ func TestGroupSet(t *testing.T) {
 	group := routegroup.New(mux)
 
 	// configure the group using Set
-	group.Set(func(g *routegroup.Bundle) {
+	group.Route(func(g *routegroup.Bundle) {
 		g.Use(testMiddleware)
 		g.Handle("/test", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
@@ -206,6 +206,57 @@ func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 	})
 }
 
+func TestHTTPServerWithDerived(t *testing.T) {
+	// create a new bundle with default middleware
+	bundle := routegroup.New(http.NewServeMux())
+	bundle.Use(testMiddleware)
+
+	// mount a group with additional middleware on /api
+	group1 := bundle.Mount("/api")
+	group1.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-API-Middleware", "applied")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	group1.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("GET test method handler"))
+	})
+
+	// add another group with middleware
+	bundle.Group().Route(func(g *routegroup.Bundle) {
+		g.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("X-Blah-Middleware", "true")
+				next.ServeHTTP(w, r)
+			})
+		})
+		g.Handle("GET /blah/blah", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("GET blah method handler"))
+		})
+	})
+
+	testServer := httptest.NewServer(bundle)
+	defer testServer.Close()
+
+	resp, err := http.Get(testServer.URL + "/api/test")
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "GET test method handler", string(body))
+	assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+
+	resp, err = http.Get(testServer.URL + "/blah/blah")
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+	body, err = io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+	assert.Equal(t, "GET blah method handler", string(body))
+	assert.Equal(t, "true", resp.Header.Get("X-Blah-Middleware"))
+}
+
 func ExampleNew() {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
@@ -213,7 +264,7 @@ func ExampleNew() {
 	// apply middleware to the group
 	group.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Add("X-Test-Middleware", "true")
+			w.Header().Add("X-Mounted-Middleware", "true")
 			next.ServeHTTP(w, r)
 		})
 	})
@@ -258,12 +309,12 @@ func ExampleMount() {
 	}
 }
 
-func ExampleBundle_Set() {
+func ExampleBundle_Route() {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
 
 	// configure the group using Set
-	group.Set(func(g *routegroup.Bundle) {
+	group.Route(func(g *routegroup.Bundle) {
 		// apply middleware to the group
 		g.Use(func(next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

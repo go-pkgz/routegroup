@@ -29,6 +29,35 @@ func Mount(mux *http.ServeMux, basePath string) *Bundle {
 	}
 }
 
+// ServeHTTP implements the http.Handler interface
+func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b.mux.ServeHTTP(w, r)
+}
+
+// Group creates a new group with the same middleware stack as the original on top of the existing bundle.
+func (b *Bundle) Group() *Bundle {
+	// copy the middlewares to avoid modifying the original
+	middlewares := make([]func(http.Handler) http.Handler, len(b.middlewares))
+	copy(middlewares, b.middlewares)
+	return &Bundle{
+		mux:         b.mux,
+		basePath:    b.basePath,
+		middlewares: middlewares,
+	}
+}
+
+// Mount creates a new group with a specified base path on top of the existing bundle.
+func (b *Bundle) Mount(basePath string) *Bundle {
+	// copy the middlewares to avoid modifying the original
+	middlewares := make([]func(http.Handler) http.Handler, len(b.middlewares))
+	copy(middlewares, b.middlewares)
+	return &Bundle{
+		mux:         b.mux,
+		basePath:    basePath,
+		middlewares: middlewares,
+	}
+}
+
 // Use adds middleware(s) to the Group.
 func (b *Bundle) Use(middleware func(http.Handler) http.Handler, more ...func(http.Handler) http.Handler) {
 	b.middlewares = append(b.middlewares, middleware)
@@ -77,7 +106,7 @@ func (b *Bundle) Handle(path string, handler http.HandlerFunc) {
 	b.mux.HandleFunc(path, wrap(handler, b.middlewares...).ServeHTTP)
 }
 
-// Set allows for configuring the Group.
-func (b *Bundle) Set(configureFn func(*Bundle)) {
+// Route allows for configuring the Group inside the configureFn function.
+func (b *Bundle) Route(configureFn func(*Bundle)) {
 	configureFn(b)
 }
