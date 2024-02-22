@@ -2,7 +2,10 @@
 // Works with the standard library's http.ServeMux.
 package routegroup
 
-import "net/http"
+import (
+	"net/http"
+	"regexp"
+)
 
 // Bundle represents a group of routes with associated middleware.
 type Bundle struct {
@@ -46,6 +49,9 @@ func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(h
 	}
 }
 
+// Matches non-space characters, spaces, then anything, i.e. "GET /path/to/resource"
+var reGo122 = regexp.MustCompile(`^(\S*)\s+(.*)$`)
+
 // Handle adds a new route to the Group's mux, applying all middlewares to the handler.
 func (b *Bundle) Handle(path string, handler http.HandlerFunc) {
 	wrap := func(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
@@ -58,7 +64,17 @@ func (b *Bundle) Handle(path string, handler http.HandlerFunc) {
 		}
 		return res
 	}
-	b.mux.HandleFunc(b.basePath+path, wrap(handler, b.middlewares...).ServeHTTP)
+
+	if b.basePath != "" {
+		matches := reGo122.FindStringSubmatch(path)
+		if len(matches) > 2 { // path in the form "GET /path/to/resource"
+			path = matches[1] + " " + b.basePath + matches[2]
+		} else { // path is just "/path/to/resource"
+			path = b.basePath + path
+		}
+	}
+
+	b.mux.HandleFunc(path, wrap(handler, b.middlewares...).ServeHTTP)
 }
 
 // Set allows for configuring the Group.
