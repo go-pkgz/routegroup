@@ -237,24 +237,53 @@ func TestHTTPServerWithDerived(t *testing.T) {
 		})
 	})
 
+	// mount the bundle on /auth under /api
+	group1.Mount("/auth").Route(func(g *routegroup.Bundle) {
+		g.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("X-Auth-Middleware", "true")
+				next.ServeHTTP(w, r)
+			})
+		})
+		g.Handle("GET /auth-test", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("GET auth-test method handler"))
+		})
+	})
+
 	testServer := httptest.NewServer(bundle)
 	defer testServer.Close()
 
-	resp, err := http.Get(testServer.URL + "/api/test")
-	assert.NoError(t, err)
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	assert.NoError(t, err)
-	assert.Equal(t, "GET test method handler", string(body))
-	assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+	t.Run("GET /api/test", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/api/test")
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, "GET test method handler", string(body))
+		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+	})
 
-	resp, err = http.Get(testServer.URL + "/blah/blah")
-	assert.NoError(t, err)
-	defer resp.Body.Close()
-	body, err = io.ReadAll(resp.Body)
-	assert.NoError(t, err)
-	assert.Equal(t, "GET blah method handler", string(body))
-	assert.Equal(t, "true", resp.Header.Get("X-Blah-Middleware"))
+	t.Run("GET /blah/blah", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/blah/blah")
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, "GET blah method handler", string(body))
+		assert.Equal(t, "true", resp.Header.Get("X-Blah-Middleware"))
+		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+	})
+
+	t.Run("GET /api/auth/auth-test", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/api/auth/auth-test")
+		assert.NoError(t, err)
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.Equal(t, "GET auth-test method handler", string(body))
+		assert.Equal(t, "true", resp.Header.Get("X-Auth-Middleware"))
+		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+	})
 }
 
 func ExampleNew() {

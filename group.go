@@ -53,7 +53,7 @@ func (b *Bundle) Mount(basePath string) *Bundle {
 	copy(middlewares, b.middlewares)
 	return &Bundle{
 		mux:         b.mux,
-		basePath:    basePath,
+		basePath:    b.basePath + basePath,
 		middlewares: middlewares,
 	}
 }
