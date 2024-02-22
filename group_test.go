@@ -137,3 +137,77 @@ func TestMount(t *testing.T) {
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.Equal(t, "true", recorder.Header().Get("X-Mounted-Middleware"))
 }
+
+func ExampleNew() {
+	mux := http.NewServeMux()
+	group := routegroup.New(mux)
+
+	// apply middleware to the group
+	group.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-Test-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// add test handlers
+	group.Handle("GET /test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	group.Handle("POST /test2", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// start the server
+	http.ListenAndServe(":8080", mux)
+}
+
+func ExampleMount() {
+	mux := http.NewServeMux()
+	group := routegroup.Mount(mux, "/api")
+
+	// apply middleware to the group
+	group.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-Test-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// add test handlers
+	group.Handle("GET /test", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	group.Handle("POST /test2", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// start the server
+	http.ListenAndServe(":8080", mux)
+}
+
+func ExampleGroup_Set() {
+	mux := http.NewServeMux()
+	group := routegroup.New(mux)
+
+	// configure the group using Set
+	group.Set(func(g *routegroup.Bundle) {
+		// apply middleware to the group
+		g.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Add("X-Test-Middleware", "true")
+				next.ServeHTTP(w, r)
+			})
+		})
+		// add test handlers
+		g.Handle("GET /test", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		g.Handle("POST /test2", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+	})
+
+	// start the server
+	http.ListenAndServe(":8080", mux)
+}
