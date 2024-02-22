@@ -1,6 +1,7 @@
 package routegroup_test
 
 import (
+	"io/ioutil"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -136,6 +137,59 @@ func TestMount(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, recorder.Code)
 	assert.Equal(t, "true", recorder.Header().Get("X-Mounted-Middleware"))
+}
+
+func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
+	mux := http.NewServeMux()
+	group := routegroup.Mount(mux, "/api")
+
+	group.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-Test-Middleware", "applied")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	group.Handle("/test", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("test handler"))
+	})
+
+	testServer := httptest.NewServer(mux)
+	defer testServer.Close()
+
+	resp, err := http.Get(testServer.URL + "/api/test")
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "test handler", string(body))
+	assert.Equal(t, "applied", resp.Header.Get("X-Test-Middleware"))
+}
+
+func TestHTTPServerMethodAndPathHandling(t *testing.T) {
+	mux := http.NewServeMux()
+	group := routegroup.New(mux)
+
+	group.Use(testMiddleware)
+
+	group.Handle("GET /test", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("GET method handler"))
+	})
+
+	testServer := httptest.NewServer(mux)
+	defer testServer.Close()
+
+	resp, err := http.Get(testServer.URL + "/test")
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "GET method handler", string(body))
+	assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
 }
 
 func ExampleNew() {
