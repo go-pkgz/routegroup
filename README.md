@@ -33,7 +33,7 @@ func main() {
 }
 ```
 
-**Adding Routes with Middleware*()
+**Adding Routes with Middleware**
 
 Add routes to your group, optionally with middleware:
 
