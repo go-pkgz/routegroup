@@ -34,6 +34,11 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b.mux.ServeHTTP(w, r)
 }
 
+// Mux returns the underlying http.ServeMux
+func (b *Bundle) Mux() *http.ServeMux {
+	return b.mux
+}
+
 // Group creates a new group with the same middleware stack as the original on top of the existing bundle.
 func (b *Bundle) Group() *Bundle {
 	// copy the middlewares to avoid modifying the original

@@ -182,7 +182,7 @@ func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 		_, _ = w.Write([]byte("test2 method handler"))
 	})
 
-	testServer := httptest.NewServer(mux)
+	testServer := httptest.NewServer(group.Mux())
 	defer testServer.Close()
 
 	t.Run("handle with verb", func(t *testing.T) {
