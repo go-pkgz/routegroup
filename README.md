@@ -144,6 +144,69 @@ mux.Mount("/admin").Route(func(b *routegroup.Bundle) {
 http.ListenAndServe(":8080", mux)
 ```
 
+## Real-world example
+
+Here's an example of how `routegroup` can be used in a real-world application. The following code snippet is taken from a web service that provides a set of routes for user authentication, session management, and user management. The service also serves static files from the "assets/static" embedded file system.
+
+```go
+
+// Routes returns http.Handler that handles all the routes for the Service.
+// It also serves static files from the "assets/static" directory.
+// The rootURL option sets prefix for the routes.
+func (s *Service) Routes() http.Handler {
+	router := routegroup.Mount(http.NewServeMux(), s.rootURL) // make a bundle with the rootURL base path
+	// add common middlewares
+	router.Use(rest.Maybe(handlers.CompressHandler, func(*http.Request) bool { return !s.skipGZ }))
+	router.Use(rest.Throttle(s.limitActiveReqs))
+	router.Use(s.middleware.securityHeaders(s.skipSecurityHeaders))
+
+	// prepare csrf middleware
+	csrfMiddleware := s.middleware.csrf(s.skipCSRFCheck)
+
+	// add open routes
+	router.Handle("GET /login", s.loginPageHandler)
+	router.Handle("POST /login", s.loginCheckHandler)
+	router.Handle("GET /logout", s.logoutHandler)
+
+	// add routes with auth middleware
+	router.Group().Route(func(auth *routegroup.Bundle) {
+		auth.Use(s.middleware.Auth())
+		auth.Handle("GET /update", s.pwdUpdateHandler)
+		auth.With(csrfMiddleware).Handle("PUT /update", s.pwdUpdateHandler)
+	})
+
+	// add admin routes
+	router.Mount("/admin").Route(func(admin *routegroup.Bundle) {
+		admin.Use(s.middleware.Auth("admin"))
+		admin.Use(s.middleware.AdminOnly)
+		admin.Handle("GET /", s.admin.renderHandler)
+		admin.With(csrfMiddleware).Route(func(csrf *routegroup.Bundle) {
+			csrf.Handle("DELETE /sessions", s.admin.deleteSessionsHandler)
+			csrf.Handle("POST /user", s.admin.addUserHandler)
+			csrf.Handle("DELETE /user", s.admin.deleteUserHandler)
+		})
+	})
+
+	router.Handle("GET /static/*", s.fileServerHandlerFunc()) // serve static files
+	return router
+}
+
+// fileServerHandlerFunc returns http.HandlerFunc that serves static files from the "assets/static" directory.
+// prefix is set by the rootURL option.
+func (s *Service) fileServerHandlerFunc() http.HandlerFunc {
+    staticFS, err := fs.Sub(assets, "assets/static") // error is always nil, assumed from provided context
+    if err != nil {
+        panic(err) // should never happen we load from embedded FS
+    }
+    return func(w http.ResponseWriter, r *http.Request) {
+        webFS := http.StripPrefix(s.rootURL+"/static/", http.FileServer(http.FS(staticFS)))
+        webFS.ServeHTTP(w, r)
+    }
+}
+
+
+```
+
 ## Contributing
 
 Contributions to `routegroup` are welcome! Please submit a pull request or open an issue for any bugs or feature requests.
