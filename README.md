@@ -194,7 +194,7 @@ func (s *Service) Routes() http.Handler {
 // fileServerHandlerFunc returns http.HandlerFunc that serves static files from the "assets/static" directory.
 // prefix is set by the rootURL option.
 func (s *Service) fileServerHandlerFunc() http.HandlerFunc {
-    staticFS, err := fs.Sub(assets, "assets/static") // error is always nil, assumed from provided context
+    staticFS, err := fs.Sub(assets, "assets/static") // error is always nil
     if err != nil {
         panic(err) // should never happen we load from embedded FS
     }
