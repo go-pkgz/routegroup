@@ -9,13 +9,6 @@
 - Easy middleware integration for individual routes or groups of routes.
 - Seamless integration with Go's standard `http.ServeMux`.
 
-## Why One More Router?
-
-Despite what the section title might suggest, `routegroup` is not another router. With Go's 1.22 release, the standard library's [routing enhancements](https://go.dev/blog/routing-enhancements) have made it possible to implement sophisticated routing logic without the need for external libraries. These enhancements provide the foundation for building fully functional HTTP servers directly with the tools Go offers.
-
-However, while the standard `http.ServeMux` has become more powerful, it still lacks some conveniences, particularly in route grouping and middleware management. This is where `routegroup` steps in. Rather than reinventing the wheel, `routegroup` aims to supplement the existing routing capabilities by providing a minimalist abstraction layer for efficiently grouping routes and applying middleware to these groups.
-
-
 ## Install and update
 
 `go get -u github.com/go-pkgz/routegroup`
