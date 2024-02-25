@@ -99,7 +99,7 @@ You can also use the `Route` method to add routes and middleware in a single fun
 ```go
 mux := http.NewServeMux()
 group := routegroup.New(mux)
-group.Route(b func(*routegroup.Bundle) {
+group.Route(func(b *routegroup.Bundle) {
     b.Use(loggingMiddleware, corsMiddleware)
     b.Handle("GET /hello", helloHandler)
     b.Handle("GET /bye", byeHandler)
