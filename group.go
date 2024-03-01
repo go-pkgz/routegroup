@@ -83,11 +83,27 @@ func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(h
 	}
 }
 
+// Handle adds a new route to the Group's mux, applying all middlewares to the handler.
+func (b *Bundle) Handle(pattern string, handler http.Handler) {
+	b.register(pattern, handler.ServeHTTP)
+}
+
+// HandleFunc registers the handler function for the given pattern to the Group's mux.
+// The handler is wrapped with the Group's middlewares.
+func (b *Bundle) HandleFunc(pattern string, handler http.HandlerFunc) {
+	b.register(pattern, handler)
+}
+
+// Handler returns the handler and the pattern that matches the request.
+// It always returns a non-nil handler, see http.ServeMux.Handler documentation for details.
+func (b *Bundle) Handler(r *http.Request) (h http.Handler, pattern string) {
+	return b.mux.Handler(r)
+}
+
 // Matches non-space characters, spaces, then anything, i.e. "GET /path/to/resource"
 var reGo122 = regexp.MustCompile(`^(\S*)\s+(.*)$`)
 
-// Handle adds a new route to the Group's mux, applying all middlewares to the handler.
-func (b *Bundle) Handle(path string, handler http.HandlerFunc) {
+func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 	wrap := func(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
 		if len(mws) == 0 {
 			return h
@@ -100,15 +116,15 @@ func (b *Bundle) Handle(path string, handler http.HandlerFunc) {
 	}
 
 	if b.basePath != "" {
-		matches := reGo122.FindStringSubmatch(path)
+		matches := reGo122.FindStringSubmatch(pattern)
 		if len(matches) > 2 { // path in the form "GET /path/to/resource"
-			path = matches[1] + " " + b.basePath + matches[2]
+			pattern = matches[1] + " " + b.basePath + matches[2]
 		} else { // path is just "/path/to/resource"
-			path = b.basePath + path
+			pattern = b.basePath + pattern
 		}
 	}
 
-	b.mux.HandleFunc(path, wrap(handler, b.middlewares...).ServeHTTP)
+	b.mux.HandleFunc(pattern, wrap(handler, b.middlewares...).ServeHTTP)
 }
 
 // Route allows for configuring the Group inside the configureFn function.

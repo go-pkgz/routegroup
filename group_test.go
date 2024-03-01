@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/go-pkgz/routegroup"
 )
@@ -27,7 +28,7 @@ func TestGroupMiddleware(t *testing.T) {
 	group.Use(testMiddleware)
 
 	// add a test handler
-	group.Handle("/test", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -44,17 +45,62 @@ func TestGroupHandle(t *testing.T) {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
 
+	// add a test handler function
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("test handler"))
+	})
 	// add a test handler
-	group.Handle("/test", func(w http.ResponseWriter, _ *http.Request) {
+	group.Handle("GET /test2", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("test2 handler"))
+	}))
+
+	t.Run("handler function", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/test", http.NoBody)
+		require.NoError(t, err)
+		mux.ServeHTTP(recorder, request)
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.Equal(t, "test handler", recorder.Body.String())
+	})
+
+	t.Run("handler", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/test2", http.NoBody)
+		require.NoError(t, err)
+		mux.ServeHTTP(recorder, request)
+		assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.Equal(t, "test2 handler", recorder.Body.String())
+	})
+}
+
+func TestBundleHandler(t *testing.T) {
+	mux := http.NewServeMux()
+	group := routegroup.New(mux)
+
+	// add a test handler
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// make a request to the test handler
-	recorder := httptest.NewRecorder()
-	request, _ := http.NewRequest(http.MethodGet, "/test", http.NoBody)
-	mux.ServeHTTP(recorder, request)
+	t.Run("handler returns correct pattern and handler", func(t *testing.T) {
+		request, err := http.NewRequest(http.MethodGet, "/test", http.NoBody)
+		require.NoError(t, err)
+		handler, pattern := group.Handler(request)
 
-	assert.Equal(t, http.StatusOK, recorder.Code)
+		assert.NotNil(t, handler)
+		assert.Equal(t, "/test", pattern)
+	})
+
+	t.Run("handler returns not-nil and empty pattern for non-existing route", func(t *testing.T) {
+		request, err := http.NewRequest(http.MethodGet, "/non-existing", http.NoBody)
+		require.NoError(t, err)
+		handler, pattern := group.Handler(request)
+
+		assert.NotNil(t, handler)
+		assert.Equal(t, "", pattern)
+	})
 }
 
 func TestGroupSet(t *testing.T) {
@@ -64,7 +110,7 @@ func TestGroupSet(t *testing.T) {
 	// configure the group using Set
 	group.Route(func(g *routegroup.Bundle) {
 		g.Use(testMiddleware)
-		g.Handle("/test", func(w http.ResponseWriter, _ *http.Request) {
+		g.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
 	})
@@ -99,7 +145,7 @@ func TestGroupWithMiddleware(t *testing.T) {
 	})
 
 	// add a test handler to the new group
-	newGroup.Handle("/with-test", func(w http.ResponseWriter, _ *http.Request) {
+	newGroup.HandleFunc("/with-test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -126,7 +172,7 @@ func TestMount(t *testing.T) {
 	})
 
 	// add a test handler
-	group.Handle("/test", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -150,7 +196,7 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 		})
 	})
 
-	group.Handle("/test", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("test handler"))
 	})
 
@@ -174,11 +220,11 @@ func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 
 	group.Use(testMiddleware)
 
-	group.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("GET test method handler"))
 	})
 
-	group.Handle("/test2", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("/test2", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("test2 method handler"))
 	})
 
@@ -220,7 +266,7 @@ func TestHTTPServerWithDerived(t *testing.T) {
 		})
 	})
 
-	group1.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+	group1.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("GET test method handler"))
 	})
 
@@ -232,7 +278,7 @@ func TestHTTPServerWithDerived(t *testing.T) {
 				next.ServeHTTP(w, r)
 			})
 		})
-		g.Handle("GET /blah/blah", func(w http.ResponseWriter, _ *http.Request) {
+		g.HandleFunc("GET /blah/blah", func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("GET blah method handler"))
 		})
 	})
@@ -245,7 +291,7 @@ func TestHTTPServerWithDerived(t *testing.T) {
 				next.ServeHTTP(w, r)
 			})
 		})
-		g.Handle("GET /auth-test", func(w http.ResponseWriter, _ *http.Request) {
+		g.HandleFunc("GET /auth-test", func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("GET auth-test method handler"))
 		})
 	})
@@ -299,10 +345,10 @@ func ExampleNew() {
 	})
 
 	// add test handlers
-	group.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	group.Handle("POST /test2", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("POST /test2", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -325,10 +371,10 @@ func ExampleMount() {
 	})
 
 	// add test handlers
-	group.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	group.Handle("POST /test2", func(w http.ResponseWriter, _ *http.Request) {
+	group.HandleFunc("POST /test2", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
@@ -352,10 +398,10 @@ func ExampleBundle_Route() {
 			})
 		})
 		// add test handlers
-		g.Handle("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+		g.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
-		g.Handle("POST /test2", func(w http.ResponseWriter, _ *http.Request) {
+		g.HandleFunc("POST /test2", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		})
 	})

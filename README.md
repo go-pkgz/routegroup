@@ -8,6 +8,7 @@
 - Simple and intuitive API for route grouping and route mounting.
 - Easy middleware integration for individual routes or groups of routes.
 - Seamless integration with Go's standard `http.ServeMux`.
+- Fully compatible with the `http.Handler` interface and can be used as a drop-in replacement for `http.ServeMux`.
 
 ## Install and update
 
@@ -69,14 +70,14 @@ func main() {
 	apiGroup.Use(loggingMiddleware, corsMiddleware)
 
 	// route handling
-	apiGroup.Handle("GET /hello", func(w http.ResponseWriter, r *http.Request) {
+	apiGroup.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, API!"))
 	})
 	
 	// add another group with its own set of middlewares
 	protectedGroup := apiGroup.Group()
 	protectedGroup.Use(authMiddleware)
-	protectedGroup.Handle("GET /protected", func(w http.ResponseWriter, r *http.Request) {
+	protectedGroup.HandleFunc("GET /protected", func(w http.ResponseWriter, r *http.Request) {
         w.Write([]byte("Protected API!"))
     })
 
@@ -109,7 +110,7 @@ http.ListenAndServe(":8080", mux)
 
 ### Using derived groups
 
-In some instances, it's practical to create an initial group that includes a set of middlewares, and then derive all other groups from it. This approach guarantees that every group incorporates a common set of middlewares as a foundation, allowing each to add its specific middlewares. To facilitate this scenario, `routegrou`p offers both `Bundle.Group` and `Bundle.Mount` methods, and it also implements the `http.Handler` interface. The following example illustrates how to utilize derived groups:
+In some instances, it's practical to create an initial group that includes a set of middlewares, and then derive all other groups from it. This approach guarantees that every group incorporates a common set of middlewares as a foundation, allowing each to add its specific middlewares. To facilitate this scenario, `routegroup` offers both `Bundle.Group` and `Bundle.Mount` methods, and it also implements the `http.Handler` interface. The following example illustrates how to use derived groups:
 
 ```go
 // create a new bundle with a base set of middlewares
@@ -157,30 +158,30 @@ func (s *Service) Routes() http.Handler {
 	csrfMiddleware := s.middleware.csrf(s.skipCSRFCheck)
 
 	// add open routes
-	router.Handle("GET /login", s.loginPageHandler)
-	router.Handle("POST /login", s.loginCheckHandler)
-	router.Handle("GET /logout", s.logoutHandler)
+	router.HandleFunc("GET /login", s.loginPageHandler)
+	router.HandleFunc("POST /login", s.loginCheckHandler)
+	router.HandleFunc("GET /logout", s.logoutHandler)
 
 	// add routes with auth middleware
 	router.Group().Route(func(auth *routegroup.Bundle) {
 		auth.Use(s.middleware.Auth())
-		auth.Handle("GET /update", s.pwdUpdateHandler)
-		auth.With(csrfMiddleware).Handle("PUT /update", s.pwdUpdateHandler)
+		auth.HandleFunc("GET /update", s.pwdUpdateHandler)
+		auth.With(csrfMiddleware).HandleFunc("PUT /update", s.pwdUpdateHandler)
 	})
 
 	// add admin routes
 	router.Mount("/admin").Route(func(admin *routegroup.Bundle) {
 		admin.Use(s.middleware.Auth("admin"))
 		admin.Use(s.middleware.AdminOnly)
-		admin.Handle("GET /", s.admin.renderHandler)
+		admin.HandleFunc("GET /", s.admin.renderHandler)
 		admin.With(csrfMiddleware).Route(func(csrf *routegroup.Bundle) {
-			csrf.Handle("DELETE /sessions", s.admin.deleteSessionsHandler)
-			csrf.Handle("POST /user", s.admin.addUserHandler)
-			csrf.Handle("DELETE /user", s.admin.deleteUserHandler)
+			csrf.HandleFunc("DELETE /sessions", s.admin.deleteSessionsHandler)
+			csrf.HandleFunc("POST /user", s.admin.addUserHandler)
+			csrf.HandleFunc("DELETE /user", s.admin.deleteUserHandler)
 		})
 	})
 
-	router.Handle("GET /static/*", s.fileServerHandlerFunc()) // serve static files
+	router.HandleFunc("GET /static/*", s.fileServerHandlerFunc()) // serve static files
 	return router
 }
 
@@ -196,8 +197,6 @@ func (s *Service) fileServerHandlerFunc() http.HandlerFunc {
         webFS.ServeHTTP(w, r)
     }
 }
-
-
 ```
 
 ## Contributing
