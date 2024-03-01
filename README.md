@@ -102,8 +102,8 @@ mux := http.NewServeMux()
 group := routegroup.New(mux)
 group.Route(func(b *routegroup.Bundle) {
     b.Use(loggingMiddleware, corsMiddleware)
-    b.HandleFunc("GET /hello", helloHandler)
-    b.HandleFunc("GET /bye", byeHandler)
+    b.Handle("GET /hello", helloHandler)
+    b.Handle("GET /bye", byeHandler)
 })
 http.ListenAndServe(":8080", mux)
 ```
@@ -122,8 +122,8 @@ mux.Use(loggingMiddleware, corsMiddleware)
 // this group will inherit the middlewares from the base group
 apiGroup := mux.Group()
 apiGroup.Use(apiMiddleware)
-apiGroup.HandleFunc("GET /hello", helloHandler)
-apiGroup.HandleFunc("GET /bye", byeHandler)
+apiGroup.Handle("GET /hello", helloHandler)
+apiGroup.Handle("GET /bye", byeHandler)
 
 
 // mount another group for the /admin path with its own set of middlewares, 
@@ -131,7 +131,7 @@ apiGroup.HandleFunc("GET /bye", byeHandler)
 // this group will inherit the middlewares from the base group as well
 mux.Mount("/admin").Route(func(b *routegroup.Bundle) {
     b.Use(adminMiddleware)
-    b.HandleFunc("POST /do", doHandler)
+    b.Handle("POST /do", doHandler)
 })
 
 // start the server, passing the wrapped mux as the handler
@@ -197,8 +197,6 @@ func (s *Service) fileServerHandlerFunc() http.HandlerFunc {
         webFS.ServeHTTP(w, r)
     }
 }
-
-
 ```
 
 ## Contributing
