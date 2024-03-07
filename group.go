@@ -105,14 +105,10 @@ var reGo122 = regexp.MustCompile(`^(\S*)\s+(.*)$`)
 
 func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 	wrap := func(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
-		if len(mws) == 0 {
-			return h
-		}
-		res := h
 		for i := len(mws) - 1; i >= 0; i-- {
-			res = mws[i](res)
+			h = mws[i](h)
 		}
-		return res
+		return h
 	}
 
 	if b.basePath != "" {
@@ -130,4 +126,12 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 // Route allows for configuring the Group inside the configureFn function.
 func (b *Bundle) Route(configureFn func(*Bundle)) {
 	configureFn(b)
+}
+
+// Wrap directly wraps the handler with the provided middleware(s).
+func Wrap(handler http.Handler, mw1 func(http.Handler) http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
+	for i := len(mws) - 1; i >= 0; i-- {
+		handler = mws[i](handler)
+	}
+	return mw1(handler)
 }

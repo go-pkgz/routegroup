@@ -214,6 +214,26 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 	assert.Equal(t, "applied", resp.Header.Get("X-Test-Middleware"))
 }
 
+func TestHTTPServerWithBasePathNoMiddleware(t *testing.T) {
+	mux := http.NewServeMux()
+	group := routegroup.Mount(mux, "/api")
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("test handler"))
+	})
+
+	testServer := httptest.NewServer(mux)
+	defer testServer.Close()
+
+	resp, err := http.Get(testServer.URL + "/api/test")
+	assert.NoError(t, err)
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	assert.NoError(t, err)
+
+	assert.Equal(t, "test handler", string(body))
+}
+
 func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 	mux := http.NewServeMux()
 	group := routegroup.Mount(mux, "/api")
@@ -330,6 +350,39 @@ func TestHTTPServerWithDerived(t *testing.T) {
 		assert.Equal(t, "true", resp.Header.Get("X-Auth-Middleware"))
 		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
 	})
+}
+
+func TestHTTPServerWrap(t *testing.T) {
+	mw1 := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-MW1", "1")
+			h.ServeHTTP(w, r)
+		})
+	}
+	mw2 := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-MW2", "2")
+			h.ServeHTTP(w, r)
+		})
+	}
+
+	handlers := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("test handler"))
+	})
+
+	ts := httptest.NewServer(routegroup.Wrap(handlers, mw1, mw2))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	require.NoError(t, err)
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "1", resp.Header.Get("X-MW1"))
+	assert.Equal(t, "2", resp.Header.Get("X-MW2"))
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	assert.Equal(t, "test handler", string(body))
 }
 
 func ExampleNew() {

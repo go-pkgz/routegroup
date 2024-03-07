@@ -137,6 +137,15 @@ mux.Mount("/admin").Route(func(b *routegroup.Bundle) {
 // start the server, passing the wrapped mux as the handler
 http.ListenAndServe(":8080", mux)
 ```
+### Wrap Function
+
+Sometimes route's group is not necessary, and all you need is to apply middleware(s) directly to a single route. In this case, `routegroup` provides a `Wrap` function that can be used to wrap a single `http.Handler` with one or more middlewares. Here's an example:
+
+```go
+mux := http.NewServeMux()
+mux.HandleFunc("/hello", routegroup.Wrap(helloHandler, loggingMiddleware, corsMiddleware))
+http.ListenAndServe(":8080", mux)
+```
 
 ## Real-world example
 
