@@ -6,9 +6,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/go-pkgz/routegroup"
 )
 
@@ -24,33 +21,34 @@ func TestGroupMiddleware(t *testing.T) {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
 
-	// apply middleware to the group
 	group.Use(testMiddleware)
 
-	// add a test handler
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// make a request to the test handler
 	recorder := httptest.NewRecorder()
-	request, _ := http.NewRequest(http.MethodGet, "/test", http.NoBody)
+	request, err := http.NewRequest(http.MethodGet, "/test", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mux.ServeHTTP(recorder, request)
 
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Equal(t, "true", recorder.Header().Get("X-Test-Middleware"))
+	if recorder.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if header := recorder.Header().Get("X-Test-Middleware"); header != "true" {
+		t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+	}
 }
-
 func TestGroupHandle(t *testing.T) {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
 
-	// add a test handler function
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("test handler"))
 	})
-	// add a test handler
 	group.Handle("GET /test2", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("test2 handler"))
@@ -59,19 +57,31 @@ func TestGroupHandle(t *testing.T) {
 	t.Run("handler function", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request, err := http.NewRequest(http.MethodGet, "/test", http.NoBody)
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		mux.ServeHTTP(recorder, request)
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		assert.Equal(t, "test handler", recorder.Body.String())
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if body := recorder.Body.String(); body != "test handler" {
+			t.Errorf("Expected body 'test handler', got '%s'", body)
+		}
 	})
 
 	t.Run("handler", func(t *testing.T) {
 		recorder := httptest.NewRecorder()
 		request, err := http.NewRequest(http.MethodGet, "/test2", http.NoBody)
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		mux.ServeHTTP(recorder, request)
-		assert.Equal(t, http.StatusOK, recorder.Code)
-		assert.Equal(t, "test2 handler", recorder.Body.String())
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if body := recorder.Body.String(); body != "test2 handler" {
+			t.Errorf("Expected body 'test2 handler', got '%s'", body)
+		}
 	})
 }
 
@@ -79,35 +89,45 @@ func TestBundleHandler(t *testing.T) {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
 
-	// add a test handler
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
 	t.Run("handler returns correct pattern and handler", func(t *testing.T) {
 		request, err := http.NewRequest(http.MethodGet, "/test", http.NoBody)
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		handler, pattern := group.Handler(request)
 
-		assert.NotNil(t, handler)
-		assert.Equal(t, "/test", pattern)
+		if handler == nil {
+			t.Error("Expected handler to be not nil")
+		}
+		if pattern != "/test" {
+			t.Errorf("Expected pattern '/test', got '%s'", pattern)
+		}
 	})
 
 	t.Run("handler returns not-nil and empty pattern for non-existing route", func(t *testing.T) {
 		request, err := http.NewRequest(http.MethodGet, "/non-existing", http.NoBody)
-		require.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		handler, pattern := group.Handler(request)
 
-		assert.NotNil(t, handler)
-		assert.Equal(t, "", pattern)
+		if handler == nil {
+			t.Error("Expected handler to be not nil")
+		}
+		if pattern != "" {
+			t.Errorf("Expected empty pattern, got '%s'", pattern)
+		}
 	})
 }
 
-func TestGroupSet(t *testing.T) {
+func TestGroupRoute(t *testing.T) {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
 
-	// configure the group using Set
 	group.Route(func(g *routegroup.Bundle) {
 		g.Use(testMiddleware)
 		g.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
@@ -115,20 +135,25 @@ func TestGroupSet(t *testing.T) {
 		})
 	})
 
-	// make a request to the test handler
 	recorder := httptest.NewRecorder()
-	request, _ := http.NewRequest(http.MethodGet, "/test", http.NoBody)
+	request, err := http.NewRequest(http.MethodGet, "/test", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mux.ServeHTTP(recorder, request)
 
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Equal(t, "true", recorder.Header().Get("X-Test-Middleware"))
+	if recorder.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if header := recorder.Header().Get("X-Test-Middleware"); header != "true" {
+		t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+	}
 }
 
 func TestGroupWithMiddleware(t *testing.T) {
 	mux := http.NewServeMux()
 	group := routegroup.New(mux)
 
-	// original group middleware
 	group.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("X-Original-Middleware", "true")
@@ -136,7 +161,6 @@ func TestGroupWithMiddleware(t *testing.T) {
 		})
 	})
 
-	// new group with additional middleware
 	newGroup := group.With(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("X-New-Middleware", "true")
@@ -144,21 +168,27 @@ func TestGroupWithMiddleware(t *testing.T) {
 		})
 	})
 
-	// add a test handler to the new group
 	newGroup.HandleFunc("/with-test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// make a request to the test handler
 	recorder := httptest.NewRecorder()
-	request, _ := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
+	request, err := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mux.ServeHTTP(recorder, request)
 
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Equal(t, "true", recorder.Header().Get("X-Original-Middleware"))
-	assert.Equal(t, "true", recorder.Header().Get("X-New-Middleware"))
+	if recorder.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
+		t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
+	}
+	if header := recorder.Header().Get("X-New-Middleware"); header != "true" {
+		t.Errorf("Expected header X-New-Middleware to be 'true', got '%s'", header)
+	}
 }
-
 func TestMount(t *testing.T) {
 	mux := http.NewServeMux()
 	basePath := "/api"
@@ -171,18 +201,23 @@ func TestMount(t *testing.T) {
 		})
 	})
 
-	// add a test handler
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	// make a request to the mounted handler
 	recorder := httptest.NewRecorder()
-	request, _ := http.NewRequest(http.MethodGet, basePath+"/test", http.NoBody)
+	request, err := http.NewRequest(http.MethodGet, basePath+"/test", http.NoBody)
+	if err != nil {
+		t.Fatal(err)
+	}
 	mux.ServeHTTP(recorder, request)
 
-	assert.Equal(t, http.StatusOK, recorder.Code)
-	assert.Equal(t, "true", recorder.Header().Get("X-Mounted-Middleware"))
+	if recorder.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if header := recorder.Header().Get("X-Mounted-Middleware"); header != "true" {
+		t.Errorf("Expected header X-Mounted-Middleware to be 'true', got '%s'", header)
+	}
 }
 
 func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
@@ -204,14 +239,22 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 	defer testServer.Close()
 
 	resp, err := http.Get(testServer.URL + "/api/test")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	assert.Equal(t, "test handler", string(body))
-	assert.Equal(t, "applied", resp.Header.Get("X-Test-Middleware"))
+	if string(body) != "test handler" {
+		t.Errorf("Expected body 'test handler', got '%s'", string(body))
+	}
+	if header := resp.Header.Get("X-Test-Middleware"); header != "applied" {
+		t.Errorf("Expected header X-Test-Middleware to be 'applied', got '%s'", header)
+	}
 }
 
 func TestHTTPServerWithBasePathNoMiddleware(t *testing.T) {
@@ -225,13 +268,19 @@ func TestHTTPServerWithBasePathNoMiddleware(t *testing.T) {
 	defer testServer.Close()
 
 	resp, err := http.Get(testServer.URL + "/api/test")
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
-	assert.NoError(t, err)
+	if err != nil {
+		t.Fatal(err)
+	}
 
-	assert.Equal(t, "test handler", string(body))
+	if string(body) != "test handler" {
+		t.Errorf("Expected body 'test handler', got '%s'", string(body))
+	}
 }
 
 func TestHTTPServerMethodAndPathHandling(t *testing.T) {
@@ -253,25 +302,85 @@ func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 
 	t.Run("handle with verb", func(t *testing.T) {
 		resp, err := http.Get(testServer.URL + "/api/test")
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		assert.Equal(t, "GET test method handler", string(body))
-		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "GET test method handler" {
+			t.Errorf("Expected body 'GET test method handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
 	})
 
 	t.Run("handle without verb", func(t *testing.T) {
 		resp, err := http.Get(testServer.URL + "/api/test2")
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		assert.Equal(t, "test2 method handler", string(body))
-		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "test2 method handler" {
+			t.Errorf("Expected body 'test2 method handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
 	})
 }
 
+func TestHTTPServerWrap(t *testing.T) {
+	mw1 := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-MW1", "1")
+			h.ServeHTTP(w, r)
+		})
+	}
+	mw2 := func(h http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-MW2", "2")
+			h.ServeHTTP(w, r)
+		})
+	}
+
+	handlers := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("test handler"))
+	})
+
+	ts := httptest.NewServer(routegroup.Wrap(handlers, mw1, mw2))
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+	}
+	if header := resp.Header.Get("X-MW1"); header != "1" {
+		t.Errorf("Expected header X-MW1 to be '1', got '%s'", header)
+	}
+	if header := resp.Header.Get("X-MW2"); header != "2" {
+		t.Errorf("Expected header X-MW2 to be '2', got '%s'", header)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(body) != "test handler" {
+		t.Errorf("Expected body 'test handler', got '%s'", string(body))
+	}
+}
 func TestHTTPServerWithDerived(t *testing.T) {
 	// create a new bundle with default middleware
 	bundle := routegroup.New(http.NewServeMux())
@@ -321,68 +430,63 @@ func TestHTTPServerWithDerived(t *testing.T) {
 
 	t.Run("GET /api/test", func(t *testing.T) {
 		resp, err := http.Get(testServer.URL + "/api/test")
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		assert.Equal(t, "GET test method handler", string(body))
-		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "GET test method handler" {
+			t.Errorf("Expected body 'GET test method handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
 	})
 
 	t.Run("GET /blah/blah", func(t *testing.T) {
 		resp, err := http.Get(testServer.URL + "/blah/blah")
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		assert.Equal(t, "GET blah method handler", string(body))
-		assert.Equal(t, "true", resp.Header.Get("X-Blah-Middleware"))
-		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "GET blah method handler" {
+			t.Errorf("Expected body 'GET blah method handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Blah-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Blah-Middleware to be 'true', got '%s'", header)
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
 	})
 
 	t.Run("GET /api/auth/auth-test", func(t *testing.T) {
 		resp, err := http.Get(testServer.URL + "/api/auth/auth-test")
-		assert.NoError(t, err)
+		if err != nil {
+			t.Fatal(err)
+		}
 		defer resp.Body.Close()
 		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		assert.Equal(t, "GET auth-test method handler", string(body))
-		assert.Equal(t, "true", resp.Header.Get("X-Auth-Middleware"))
-		assert.Equal(t, "true", resp.Header.Get("X-Test-Middleware"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "GET auth-test method handler" {
+			t.Errorf("Expected body 'GET auth-test method handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Auth-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Auth-Middleware to be 'true', got '%s'", header)
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
 	})
-}
-
-func TestHTTPServerWrap(t *testing.T) {
-	mw1 := func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-MW1", "1")
-			h.ServeHTTP(w, r)
-		})
-	}
-	mw2 := func(h http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-MW2", "2")
-			h.ServeHTTP(w, r)
-		})
-	}
-
-	handlers := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("test handler"))
-	})
-
-	ts := httptest.NewServer(routegroup.Wrap(handlers, mw1, mw2))
-	defer ts.Close()
-
-	resp, err := http.Get(ts.URL)
-	require.NoError(t, err)
-
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "1", resp.Header.Get("X-MW1"))
-	assert.Equal(t, "2", resp.Header.Get("X-MW2"))
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	assert.Equal(t, "test handler", string(body))
 }
 
 func ExampleNew() {
