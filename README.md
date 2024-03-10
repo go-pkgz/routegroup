@@ -127,7 +127,7 @@ apiGroup.Handle("GET /bye", byeHandler)
 
 
 // mount another group for the /admin path with its own set of middlewares, 
-// using `Set` method to show the alternative usage.
+// using `Route` method to show the alternative usage.
 // this group will inherit the middlewares from the base group as well
 mux.Mount("/admin").Route(func(b *routegroup.Bundle) {
     b.Use(adminMiddleware)
