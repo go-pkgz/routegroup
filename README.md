@@ -58,9 +58,8 @@ Here's a complete example demonstrating route grouping and middleware usage:
 package main
 
 import (
-	"fmt"
 	"net/http"
-	
+
 	"github.com/go-pkgz/routegroup"
 )
 
@@ -75,15 +74,15 @@ func main() {
 	apiGroup.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, API!"))
 	})
-	
+
 	// add another group with its own set of middlewares
 	protectedGroup := apiGroup.Group()
 	protectedGroup.Use(authMiddleware)
 	protectedGroup.HandleFunc("GET /protected", func(w http.ResponseWriter, r *http.Request) {
-        w.Write([]byte("Protected API!"))
-    })
+		w.Write([]byte("Protected API!"))
+	})
 
-    http.ListenAndServe(":8080", mux)
+	http.ListenAndServe(":8080", mux)
 }
 ```
 
@@ -92,7 +91,7 @@ func main() {
 You can also apply middleware to specific routes inside the group without modifying the group's middleware stack:
 
 ```go
-apiGroup.With(corsMiddleware, helloHandler).Handle("GET /hello",helloHandler)
+apiGroup.With(corsMiddleware, apiMiddleware).Handle("GET /hello", helloHandler)
 ```
 
 **Alternative Usage with `Route`**
