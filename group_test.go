@@ -18,9 +18,7 @@ func testMiddleware(next http.Handler) http.Handler {
 }
 
 func TestGroupMiddleware(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
-
+	group := routegroup.New(http.NewServeMux())
 	group.Use(testMiddleware)
 
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
@@ -32,7 +30,7 @@ func TestGroupMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux.ServeHTTP(recorder, request)
+	group.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
@@ -42,8 +40,7 @@ func TestGroupMiddleware(t *testing.T) {
 	}
 }
 func TestGroupHandle(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.New(http.NewServeMux())
 
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -60,7 +57,7 @@ func TestGroupHandle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		mux.ServeHTTP(recorder, request)
+		group.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
 		}
@@ -75,7 +72,7 @@ func TestGroupHandle(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		mux.ServeHTTP(recorder, request)
+		group.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusOK {
 			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
 		}
@@ -86,8 +83,7 @@ func TestGroupHandle(t *testing.T) {
 }
 
 func TestBundleHandler(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.New(http.NewServeMux())
 
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -125,8 +121,7 @@ func TestBundleHandler(t *testing.T) {
 }
 
 func TestGroupRoute(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.New(http.NewServeMux())
 
 	group.Route(func(g *routegroup.Bundle) {
 		g.Use(testMiddleware)
@@ -140,7 +135,7 @@ func TestGroupRoute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux.ServeHTTP(recorder, request)
+	group.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
@@ -151,8 +146,7 @@ func TestGroupRoute(t *testing.T) {
 }
 
 func TestGroupWithMiddleware(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.New(http.NewServeMux())
 
 	group.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -177,7 +171,7 @@ func TestGroupWithMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux.ServeHTTP(recorder, request)
+	group.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
@@ -190,8 +184,7 @@ func TestGroupWithMiddleware(t *testing.T) {
 	}
 }
 func TestGroupWithMoreMiddleware(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.New(http.NewServeMux())
 
 	newGroup := group.With(
 		func(next http.Handler) http.Handler {
@@ -217,7 +210,7 @@ func TestGroupWithMoreMiddleware(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux.ServeHTTP(recorder, request)
+	group.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
@@ -230,9 +223,8 @@ func TestGroupWithMoreMiddleware(t *testing.T) {
 	}
 }
 func TestMount(t *testing.T) {
-	mux := http.NewServeMux()
 	basePath := "/api"
-	group := routegroup.Mount(mux, basePath)
+	group := routegroup.Mount(http.NewServeMux(), basePath)
 
 	group.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -250,7 +242,7 @@ func TestMount(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mux.ServeHTTP(recorder, request)
+	group.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
@@ -261,8 +253,7 @@ func TestMount(t *testing.T) {
 }
 
 func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.Mount(mux, "/api")
+	group := routegroup.Mount(http.NewServeMux(), "/api")
 
 	group.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -275,7 +266,7 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 		_, _ = w.Write([]byte("test handler"))
 	})
 
-	testServer := httptest.NewServer(mux)
+	testServer := httptest.NewServer(group)
 	defer testServer.Close()
 
 	resp, err := http.Get(testServer.URL + "/api/test")
@@ -298,13 +289,12 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 }
 
 func TestHTTPServerWithBasePathNoMiddleware(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.Mount(mux, "/api")
+	group := routegroup.Mount(http.NewServeMux(), "/api")
 	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("test handler"))
 	})
 
-	testServer := httptest.NewServer(mux)
+	testServer := httptest.NewServer(group)
 	defer testServer.Close()
 
 	resp, err := http.Get(testServer.URL + "/api/test")
@@ -324,8 +314,7 @@ func TestHTTPServerWithBasePathNoMiddleware(t *testing.T) {
 }
 
 func TestHTTPServerMethodAndPathHandling(t *testing.T) {
-	mux := http.NewServeMux()
-	group := routegroup.Mount(mux, "/api")
+	group := routegroup.Mount(http.NewServeMux(), "/api")
 
 	group.Use(testMiddleware)
 
@@ -337,7 +326,7 @@ func TestHTTPServerMethodAndPathHandling(t *testing.T) {
 		_, _ = w.Write([]byte("test2 method handler"))
 	})
 
-	testServer := httptest.NewServer(group.Mux())
+	testServer := httptest.NewServer(group)
 	defer testServer.Close()
 
 	t.Run("handle with verb", func(t *testing.T) {
@@ -530,8 +519,7 @@ func TestHTTPServerWithDerived(t *testing.T) {
 }
 
 func ExampleNew() {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.New(http.NewServeMux())
 
 	// apply middleware to the group
 	group.Use(func(next http.Handler) http.Handler {
@@ -550,14 +538,13 @@ func ExampleNew() {
 	})
 
 	// start the server
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe(":8080", group); err != nil {
 		panic(err)
 	}
 }
 
 func ExampleMount() {
-	mux := http.NewServeMux()
-	group := routegroup.Mount(mux, "/api")
+	group := routegroup.Mount(http.NewServeMux(), "/api")
 
 	// apply middleware to the group
 	group.Use(func(next http.Handler) http.Handler {
@@ -576,14 +563,13 @@ func ExampleMount() {
 	})
 
 	// start the server
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe(":8080", group); err != nil {
 		panic(err)
 	}
 }
 
 func ExampleBundle_Route() {
-	mux := http.NewServeMux()
-	group := routegroup.New(mux)
+	group := routegroup.New(http.NewServeMux())
 
 	// configure the group using Set
 	group.Route(func(g *routegroup.Bundle) {
@@ -604,7 +590,7 @@ func ExampleBundle_Route() {
 	})
 
 	// start the server
-	if err := http.ListenAndServe(":8080", mux); err != nil {
+	if err := http.ListenAndServe(":8080", group); err != nil {
 		panic(err)
 	}
 }
