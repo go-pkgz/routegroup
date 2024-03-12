@@ -5,32 +5,46 @@ package routegroup
 import (
 	"net/http"
 	"regexp"
+	"sync"
+	"sync/atomic"
 )
 
 // Bundle represents a group of routes with associated middleware.
 type Bundle struct {
-	mux         *http.ServeMux
-	basePath    string
-	middlewares []func(http.Handler) http.Handler
+	mux         *http.ServeMux                    // the underlying mux to register the routes to
+	basePath    string                            // base path for the group
+	middlewares []func(http.Handler) http.Handler // middlewares stack
+
+	rootRegistered atomic.Value // true if the root path is registered in the mux
+	once           sync.Once    // used to register a not found handler for the root path if no / route is registered
 }
 
 // New creates a new Group.
 func New(mux *http.ServeMux) *Bundle {
-	return &Bundle{
-		mux: mux,
-	}
+	b := &Bundle{mux: mux}
+	b.rootRegistered.Store(false)
+	return b
 }
 
 // Mount creates a new group with a specified base path.
 func Mount(mux *http.ServeMux, basePath string) *Bundle {
-	return &Bundle{
-		mux:      mux,
-		basePath: basePath,
-	}
+	b := &Bundle{mux: mux, basePath: basePath}
+	b.rootRegistered.Store(false)
+	return b
 }
 
 // ServeHTTP implements the http.Handler interface
 func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	b.once.Do(func() {
+		if !b.rootRegistered.Load().(bool) {
+			// register a not found handler for the root path if no / route is registered
+			// this is needed to be able to use middleware on all routes, for example logging
+			notFoundHandler := http.NotFoundHandler()
+			b.register("/", notFoundHandler.ServeHTTP)
+			b.rootRegistered.Store(true)
+		}
+	})
+
 	b.mux.ServeHTTP(w, r)
 }
 
@@ -99,28 +113,34 @@ func (b *Bundle) Handler(r *http.Request) (h http.Handler, pattern string) {
 var reGo122 = regexp.MustCompile(`^(\S*)\s+(.*)$`)
 
 func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
-	wrap := func(h http.Handler, mws ...func(http.Handler) http.Handler) http.Handler {
-		for i := len(mws) - 1; i >= 0; i-- {
-			h = mws[i](h)
+	matches := reGo122.FindStringSubmatch(pattern)
+	if len(matches) > 2 { // path in the form "GET /path/to/resource"
+		pattern = matches[1] + " " + b.basePath + matches[2]
+		urlPath := b.basePath + matches[2]
+		if urlPath == "/" {
+			b.rootRegistered.Store(true)
 		}
-		return h
-	}
-
-	if b.basePath != "" {
-		matches := reGo122.FindStringSubmatch(pattern)
-		if len(matches) > 2 { // path in the form "GET /path/to/resource"
-			pattern = matches[1] + " " + b.basePath + matches[2]
-		} else { // path is just "/path/to/resource"
-			pattern = b.basePath + pattern
+	} else { // path is just "/path/to/resource"
+		pattern = b.basePath + pattern
+		if pattern == "/" {
+			b.rootRegistered.Store(true)
 		}
 	}
 
-	b.mux.HandleFunc(pattern, wrap(handler, b.middlewares...).ServeHTTP)
+	b.mux.HandleFunc(pattern, b.wrapMiddleware(handler).ServeHTTP)
 }
 
 // Route allows for configuring the Group inside the configureFn function.
 func (b *Bundle) Route(configureFn func(*Bundle)) {
 	configureFn(b)
+}
+
+// wrapMiddleware applies the registered middlewares to a handler.
+func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
+	for i := range b.middlewares {
+		handler = b.middlewares[len(b.middlewares)-1-i](handler)
+	}
+	return handler
 }
 
 // Wrap directly wraps the handler with the provided middleware(s).
