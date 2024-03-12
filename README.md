@@ -64,25 +64,30 @@ import (
 )
 
 func main() {
-	mux := http.NewServeMux()
-	apiGroup := routegroup.Mount(mux, "/api")
+	router := routegroup.New(http.NewServeMux())
+	router.Use(loggingMiddleware)
 
+	// handle the /hello route
+	router.Handle("GET /hello", helloHandler)
+	
+	// create a new group for the /api path
+	apiRouter := router.Mount("/api")
 	// add middleware
-	apiGroup.Use(loggingMiddleware, corsMiddleware)
+	apiRouter.Use(loggingMiddleware, corsMiddleware)
 
 	// route handling
-	apiGroup.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
+	apiRouter.HandleFunc("GET /hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello, API!"))
 	})
 
 	// add another group with its own set of middlewares
-	protectedGroup := apiGroup.Group()
+	protectedGroup := router.Group()
 	protectedGroup.Use(authMiddleware)
 	protectedGroup.HandleFunc("GET /protected", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Protected API!"))
 	})
 
-	http.ListenAndServe(":8080", mux)
+	http.ListenAndServe(":8080", router)
 }
 ```
 
@@ -99,14 +104,13 @@ apiGroup.With(corsMiddleware, apiMiddleware).Handle("GET /hello", helloHandler)
 You can also use the `Route` method to add routes and middleware in a single function call:
 
 ```go
-mux := http.NewServeMux()
-group := routegroup.New(mux)
+group := routegroup.New(http.NewServeMux())
 group.Route(func(b *routegroup.Bundle) {
     b.Use(loggingMiddleware, corsMiddleware)
     b.Handle("GET /hello", helloHandler)
     b.Handle("GET /bye", byeHandler)
 })
-http.ListenAndServe(":8080", mux)
+http.ListenAndServe(":8080", group)
 ```
 
 ### Using derived groups
@@ -116,12 +120,12 @@ In some instances, it's practical to create an initial group that includes a set
 ```go
 // create a new bundle with a base set of middlewares
 // note: the bundle is also http.Handler and can be passed to http.ListenAndServe
-mux := routegroup.New(http.NewServeMux()) 
-mux.Use(loggingMiddleware, corsMiddleware)
+router := routegroup.New(http.NewServeMux()) 
+router.Use(loggingMiddleware, corsMiddleware)
 
 // add a new group with its own set of middlewares
 // this group will inherit the middlewares from the base group
-apiGroup := mux.Group()
+apiGroup := router.Group()
 apiGroup.Use(apiMiddleware)
 apiGroup.Handle("GET /hello", helloHandler)
 apiGroup.Handle("GET /bye", byeHandler)
@@ -130,13 +134,13 @@ apiGroup.Handle("GET /bye", byeHandler)
 // mount another group for the /admin path with its own set of middlewares, 
 // using `Route` method to show the alternative usage.
 // this group will inherit the middlewares from the base group as well
-mux.Mount("/admin").Route(func(b *routegroup.Bundle) {
+router.Mount("/admin").Route(func(b *routegroup.Bundle) {
     b.Use(adminMiddleware)
     b.Handle("POST /do", doHandler)
 })
 
 // start the server, passing the wrapped mux as the handler
-http.ListenAndServe(":8080", mux)
+http.ListenAndServe(":8080", router)
 ```
 ### Wrap Function
 
