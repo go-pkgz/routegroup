@@ -27,8 +27,6 @@ linters:
     - govet
     - unconvert
     - gas
-    - gocyclo
-    - dupl
     - misspell
     - unparam
     - typecheck

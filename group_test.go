@@ -1,6 +1,7 @@
 package routegroup_test
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 // testMiddleware is simple middleware for testing purposes.
 func testMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Test middleware")
 		w.Header().Add("X-Test-Middleware", "true")
 		next.ServeHTTP(w, r)
 	})
@@ -166,23 +168,106 @@ func TestGroupWithMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	recorder := httptest.NewRecorder()
-	request, err := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
-	if err != nil {
-		t.Fatal(err)
-	}
-	group.ServeHTTP(recorder, request)
+	t.Run("GET /with-test", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
-	}
-	if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
-		t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
-	}
-	if header := recorder.Header().Get("X-New-Middleware"); header != "true" {
-		t.Errorf("Expected header X-New-Middleware to be 'true', got '%s'", header)
-	}
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "true" {
+			t.Errorf("Expected header X-New-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /not-found", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/not-found", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "" {
+			t.Errorf("Expected header X-New-Middleware to be not set, got '%s'", header)
+		}
+	})
 }
+
+func TestDisableNotFoundHandler(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.DisableNotFoundHandler()
+
+	group.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-Original-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	newGroup := group.With(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-New-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	newGroup.HandleFunc("/with-test", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	t.Run("GET /with-test", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "true" {
+			t.Errorf("Expected header X-New-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /not-found", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/not-found", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "" {
+			t.Errorf("Expected header X-Original-Middleware to be not set, got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "" {
+			t.Errorf("Expected header X-New-Middleware to be not set, got '%s'", header)
+		}
+	})
+}
+
 func TestGroupWithMoreMiddleware(t *testing.T) {
 	group := routegroup.New(http.NewServeMux())
 
@@ -286,6 +371,104 @@ func TestHTTPServerWithBasePathAndMiddleware(t *testing.T) {
 	if header := resp.Header.Get("X-Test-Middleware"); header != "applied" {
 		t.Errorf("Expected header X-Test-Middleware to be 'applied', got '%s'", header)
 	}
+}
+
+func TestHTTPServerWithRoot(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.Use(testMiddleware)
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("test handler"))
+	})
+	group.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("root handler"))
+	})
+	testServer := httptest.NewServer(group)
+	defer testServer.Close()
+
+	t.Run("GET /test", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "test handler" {
+			t.Errorf("Expected body 'test handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "root handler" {
+			t.Errorf("Expected body 'root handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+}
+
+func TestHTTPServerWithRoot122(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.Use(testMiddleware)
+	group.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("test handler"))
+	})
+	group.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("root handler"))
+	})
+	testServer := httptest.NewServer(group)
+	defer testServer.Close()
+
+	t.Run("GET /test", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/test")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "test handler" {
+			t.Errorf("Expected body 'test handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "root handler" {
+			t.Errorf("Expected body 'root handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
 }
 
 func TestHTTPServerWithBasePathNoMiddleware(t *testing.T) {
@@ -452,6 +635,9 @@ func TestHTTPServerWithDerived(t *testing.T) {
 		g.HandleFunc("GET /auth-test", func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("GET auth-test method handler"))
 		})
+		g.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("auth GET / method handler"))
+		})
 	})
 
 	testServer := httptest.NewServer(bundle)
@@ -511,6 +697,40 @@ func TestHTTPServerWithDerived(t *testing.T) {
 		}
 		if header := resp.Header.Get("X-Auth-Middleware"); header != "true" {
 			t.Errorf("Expected header X-Auth-Middleware to be 'true', got '%s'", header)
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /api/auth/", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/api/auth/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "auth GET / method handler" {
+			t.Errorf("Expected body 'GET auth-test method handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Auth-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Auth-Middleware to be 'true', got '%s'", header)
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+	t.Run("GET /not-found", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/not-found")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, resp.StatusCode)
 		}
 		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
 			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
