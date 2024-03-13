@@ -168,23 +168,106 @@ func TestGroupWithMiddleware(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 
-	recorder := httptest.NewRecorder()
-	request, err := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
-	if err != nil {
-		t.Fatal(err)
-	}
-	group.ServeHTTP(recorder, request)
+	t.Run("GET /with-test", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusOK {
-		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
-	}
-	if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
-		t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
-	}
-	if header := recorder.Header().Get("X-New-Middleware"); header != "true" {
-		t.Errorf("Expected header X-New-Middleware to be 'true', got '%s'", header)
-	}
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "true" {
+			t.Errorf("Expected header X-New-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /not-found", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/not-found", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "" {
+			t.Errorf("Expected header X-New-Middleware to be not set, got '%s'", header)
+		}
+	})
 }
+
+func TestDisableNotFoundHandler(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.DisableNotFoundHandler()
+
+	group.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-Original-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	newGroup := group.With(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-New-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	newGroup.HandleFunc("/with-test", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	t.Run("GET /with-test", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/with-test", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Original-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "true" {
+			t.Errorf("Expected header X-New-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /not-found", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/not-found", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Original-Middleware"); header != "" {
+			t.Errorf("Expected header X-Original-Middleware to be not set, got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-New-Middleware"); header != "" {
+			t.Errorf("Expected header X-New-Middleware to be not set, got '%s'", header)
+		}
+	})
+}
+
 func TestGroupWithMoreMiddleware(t *testing.T) {
 	group := routegroup.New(http.NewServeMux())
 
