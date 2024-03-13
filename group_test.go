@@ -207,6 +207,68 @@ func TestGroupWithMiddleware(t *testing.T) {
 	})
 }
 
+func TestGroupWithMiddlewareAndTopLevelAfter(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+
+	group.Group().Route(func(g *routegroup.Bundle) {
+		g.Use(testMiddleware)
+		g.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("test handler"))
+		})
+	})
+
+	group.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Add("X-Top-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	group.HandleFunc("/top", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("top handler"))
+	})
+
+	t.Run("GET /top", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/top", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Top-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Top-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-Test-Middleware"); header != "" {
+			t.Errorf("Expected header X-Test-Middleware not to be set, got '%s'", header)
+		}
+	})
+
+	t.Run("GET /test", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/test", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		group.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if header := recorder.Header().Get("X-Top-Middleware"); header == "true" {
+			t.Errorf("Expected header X-Top-Middleware not to be set, got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+}
+
 func TestDisableNotFoundHandler(t *testing.T) {
 	group := routegroup.New(http.NewServeMux())
 	group.DisableNotFoundHandler()
