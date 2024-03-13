@@ -152,6 +152,13 @@ mux.HandleFunc("/hello", routegroup.Wrap(helloHandler, loggingMiddleware, corsMi
 http.ListenAndServe(":8080", mux)
 ```
 
+### Automatic registration of `NotFoundHandler` as catch-all route
+
+`routegroup` automatically registers a `NotFoundHandler` as a catch-all route, which is invoked when no other route matches the request. This handler is wrapped with all the middlewares that are associated with the group. This functionality is beneficial for applying middleware to all routes, including those that are unknown. It practically enables the use of middlewares that should operate across all routes, such as logging.
+
+In case you want to disable this behavior, you can use the `DisableNotFoundHandler()` function.
+
+
 ## Real-world example
 
 Here's an example of how `routegroup` can be used in a real-world application. The following code snippet is taken from a web service that provides a set of routes for user authentication, session management, and user management. The service also serves static files from the "assets/static" embedded file system.
