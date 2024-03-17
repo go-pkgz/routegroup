@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"regexp"
 	"sync"
-	"sync/atomic"
 )
 
 // Bundle represents a group of routes with associated middleware.
@@ -15,29 +14,30 @@ type Bundle struct {
 	basePath    string                            // base path for the group
 	middlewares []func(http.Handler) http.Handler // middlewares stack
 
-	rootRegistered             atomic.Value // true if the root path is registered in the mux
-	once                       sync.Once    // used to register a not found handler for the root path if no / route is registered
-	disableRootNotFoundHandler bool         // if true, the not found handler for the root path is not registered automatically
+	rootRegistered struct {
+		once                       sync.Once // used to register a not found handler for the root path if no / route is registered
+		set                        bool      // true if the root path is registered in the mux
+		disableRootNotFoundHandler bool      // if true, the not found handler for the root path is not registered automatically
+
+	}
 }
 
 // New creates a new Group.
 func New(mux *http.ServeMux) *Bundle {
 	b := &Bundle{mux: mux}
-	b.rootRegistered.Store(false)
 	return b
 }
 
 // Mount creates a new group with a specified base path.
 func Mount(mux *http.ServeMux, basePath string) *Bundle {
 	b := &Bundle{mux: mux, basePath: basePath}
-	b.rootRegistered.Store(false)
 	return b
 }
 
 // ServeHTTP implements the http.Handler interface
 func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	b.once.Do(func() {
-		if !b.rootRegistered.Load().(bool) && !b.disableRootNotFoundHandler {
+	b.rootRegistered.once.Do(func() {
+		if !b.rootRegistered.set && !b.rootRegistered.disableRootNotFoundHandler {
 			// register a not found handler for the root path if no / route is registered
 			// this is needed to be able to use middleware on all routes, for example logging
 			notFoundHandler := http.NotFoundHandler()
@@ -111,7 +111,7 @@ func (b *Bundle) Handler(r *http.Request) (h http.Handler, pattern string) {
 
 // DisableNotFoundHandler disables the automatic registration of a not found handler for the root path.
 func (b *Bundle) DisableNotFoundHandler() {
-	b.disableRootNotFoundHandler = true
+	b.rootRegistered.disableRootNotFoundHandler = true
 }
 
 // Matches non-space characters, spaces, then anything, i.e. "GET /path/to/resource"
@@ -121,17 +121,13 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 	matches := reGo122.FindStringSubmatch(pattern)
 	if len(matches) > 2 { // path in the form "GET /path/to/resource"
 		pattern = matches[1] + " " + b.basePath + matches[2]
-		urlPath := b.basePath + matches[2]
-		if urlPath == "/" {
-			b.rootRegistered.Store(true)
-		}
 	} else { // path is just "/path/to/resource"
 		pattern = b.basePath + pattern
-		if pattern == "/" {
-			b.rootRegistered.Store(true)
-		}
 	}
 
+	if pattern == "/" || b.basePath+pattern == "/" {
+		b.rootRegistered.set = true
+	}
 	b.mux.HandleFunc(pattern, b.wrapMiddleware(handler).ServeHTTP)
 }
 
