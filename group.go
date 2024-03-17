@@ -10,15 +10,13 @@ import (
 
 // Bundle represents a group of routes with associated middleware.
 type Bundle struct {
-	mux         *http.ServeMux                    // the underlying mux to register the routes to
-	basePath    string                            // base path for the group
-	middlewares []func(http.Handler) http.Handler // middlewares stack
-
+	mux            *http.ServeMux                    // the underlying mux to register the routes to
+	basePath       string                            // base path for the group
+	middlewares    []func(http.Handler) http.Handler // middlewares stack
 	rootRegistered struct {
 		once                       sync.Once // used to register a not found handler for the root path if no / route is registered
 		set                        bool      // true if the root path is registered in the mux
 		disableRootNotFoundHandler bool      // if true, the not found handler for the root path is not registered automatically
-
 	}
 }
 
@@ -44,7 +42,6 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			b.register("/", notFoundHandler.ServeHTTP)
 		}
 	})
-
 	b.mux.ServeHTTP(w, r)
 }
 
@@ -84,7 +81,6 @@ func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(h
 	copy(newMiddlewares, b.middlewares)
 	newMiddlewares = append(newMiddlewares, middleware)
 	newMiddlewares = append(newMiddlewares, more...)
-
 	return &Bundle{
 		mux:         b.mux,
 		basePath:    b.basePath,
@@ -110,9 +106,7 @@ func (b *Bundle) Handler(r *http.Request) (h http.Handler, pattern string) {
 }
 
 // DisableNotFoundHandler disables the automatic registration of a not found handler for the root path.
-func (b *Bundle) DisableNotFoundHandler() {
-	b.rootRegistered.disableRootNotFoundHandler = true
-}
+func (b *Bundle) DisableNotFoundHandler() { b.rootRegistered.disableRootNotFoundHandler = true }
 
 // Matches non-space characters, spaces, then anything, i.e. "GET /path/to/resource"
 var reGo122 = regexp.MustCompile(`^(\S*)\s+(.*)$`)
@@ -132,9 +126,7 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 }
 
 // Route allows for configuring the Group inside the configureFn function.
-func (b *Bundle) Route(configureFn func(*Bundle)) {
-	configureFn(b)
-}
+func (b *Bundle) Route(configureFn func(*Bundle)) { configureFn(b) }
 
 // wrapMiddleware applies the registered middlewares to a handler.
 func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
