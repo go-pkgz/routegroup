@@ -17,6 +17,7 @@ type Bundle struct {
 		once                       sync.Once // used to register a not found handler for the root path if no / route is registered
 		set                        bool      // true if the root path is registered in the mux
 		disableRootNotFoundHandler bool      // if true, the not found handler for the root path is not registered automatically
+		notFound                   http.HandlerFunc
 	}
 }
 
@@ -39,6 +40,9 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// register a not found handler for the root path if no / route is registered
 			// this is needed to be able to use middleware on all routes, for example logging
 			notFoundHandler := http.NotFoundHandler()
+			if b.rootRegistered.notFound != nil {
+				notFoundHandler = b.rootRegistered.notFound
+			}
 			b.register("/", notFoundHandler.ServeHTTP)
 		}
 	})
@@ -108,6 +112,11 @@ func (b *Bundle) Handler(r *http.Request) (h http.Handler, pattern string) {
 // DisableNotFoundHandler disables the automatic registration of a not found handler for the root path.
 func (b *Bundle) DisableNotFoundHandler() { b.rootRegistered.disableRootNotFoundHandler = true }
 
+// NotFoundHandler sets a custom handler for the root path if no / route is registered.
+func (b *Bundle) NotFoundHandler(handler http.HandlerFunc) {
+	b.rootRegistered.notFound = handler
+}
+
 // Matches non-space characters, spaces, then anything, i.e. "GET /path/to/resource"
 var reGo122 = regexp.MustCompile(`^(\S*)\s+(.*)$`)
 
@@ -119,6 +128,7 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 		pattern = b.basePath + pattern
 	}
 
+	// check if the root path is registered
 	if pattern == "/" || b.basePath+pattern == "/" {
 		b.rootRegistered.set = true
 	}
