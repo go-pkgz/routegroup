@@ -28,6 +28,17 @@ func main() {
     group := routegroup.New(mux)
 }
 ```
+** Setting optional `NotFoundHandler`**
+
+It is possible to set a custom `NotFoundHandler` for the group. This handler will be called when no other route matches the request:
+
+```go
+    group.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        http.Error(w, "404 page not found, something is wrong!", http.StatusNotFound)
+    })
+```
+
+If the custom `NotFoundHandler` is not set, `routegroup` will automatically use a default handler from stdlib (`http.NotFoundHandler()`). 
 
 **Adding Routes with Middleware**
 
