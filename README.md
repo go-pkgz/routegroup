@@ -28,7 +28,7 @@ func main() {
     group := routegroup.New(mux)
 }
 ```
-** Setting optional `NotFoundHandler`**
+**Setting optional `NotFoundHandler`**
 
 It is possible to set a custom `NotFoundHandler` for the group. This handler will be called when no other route matches the request:
 
