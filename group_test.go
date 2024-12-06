@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/go-pkgz/routegroup"
@@ -482,6 +483,24 @@ func TestHTTPServerWithRoot(t *testing.T) {
 			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
 		}
 	})
+
+	t.Run("/", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "root handler" {
+			t.Errorf("Expected body 'root handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
 }
 
 func TestHTTPServerWithRoot122(t *testing.T) {
@@ -526,6 +545,62 @@ func TestHTTPServerWithRoot122(t *testing.T) {
 		}
 		if string(body) != "root handler" {
 			t.Errorf("Expected body 'root handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+}
+
+func TestRootAndCatchAll(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.Use(testMiddleware)
+	group.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("root handler"))
+	})
+	group.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("custom not found handler"))
+	})
+
+	testServer := httptest.NewServer(group)
+	defer testServer.Close()
+
+	t.Run("GET /", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if string(body) != "root handler" {
+			t.Errorf("Expected body 'root handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /unknown-path", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/unknown-path")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if string(body) != "custom not found handler" {
+			t.Errorf("Expected body 'custom not found handler', got '%s'", string(body))
 		}
 		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
 			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
@@ -944,7 +1019,126 @@ func TestHTTPServerWithCustomNotFoundNon404Status(t *testing.T) {
 			t.Errorf("Expected body 'Custom 404: Page not found!', got '%s'", string(body))
 		}
 	})
+}
 
+func TestCustomNotFoundHandlerChange(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "First handler", http.StatusNotFound)
+	})
+
+	group.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "Second handler", http.StatusNotFound)
+	})
+
+	rec := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/not-found", http.NoBody)
+	group.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	if rec.Body.String() != "Second handler\n" {
+		t.Errorf("got %q, want %q", rec.Body.String(), "Second handler\n")
+	}
+}
+
+func TestDisableNotFoundHandlerAfterRouteRegistration(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := w.Write([]byte("test")); err != nil {
+			t.Fatal(err)
+		}
+	})
+	group.DisableNotFoundHandler()
+
+	rec := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/not-found", http.NoBody)
+	group.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("got %d, want %d", rec.Code, http.StatusNotFound)
+	}
+	if rec.Body.String() != "404 page not found\n" {
+		t.Errorf("got %q, want %q", rec.Body.String(), "404 page not found\n")
+	}
+}
+
+func TestConcurrentRequests(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.HandleFunc("/concurrent", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rec := httptest.NewRecorder()
+			req, _ := http.NewRequest(http.MethodGet, "/concurrent", http.NoBody)
+			group.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("got %d, want %d", rec.Code, http.StatusOK)
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+func TestMethodPatternsWithDifferentMethods(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+	group.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := io.WriteString(w, "GET handler"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	group.HandleFunc("POST /test", func(w http.ResponseWriter, _ *http.Request) {
+		if _, err := io.WriteString(w, "POST handler"); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	tests := []struct {
+		method, path, expected string
+		code                   int
+	}{
+		{http.MethodGet, "/test", "GET handler", http.StatusOK},
+		{http.MethodPost, "/test", "POST handler", http.StatusOK},
+		{http.MethodPut, "/test", "404 page not found\n", http.StatusNotFound},
+	}
+
+	for _, tt := range tests {
+		rec := httptest.NewRecorder()
+		req, _ := http.NewRequest(tt.method, tt.path, http.NoBody)
+		group.ServeHTTP(rec, req)
+		if rec.Code != tt.code {
+			t.Errorf("got %d, want %d", rec.Code, tt.code)
+		}
+		if rec.Body.String() != tt.expected {
+			t.Errorf("got %q, want %q", rec.Body.String(), tt.expected)
+		}
+	}
+}
+
+func TestMountNested(t *testing.T) {
+	bundle := routegroup.New(http.NewServeMux())
+	api := bundle.Mount("/api")
+	v1 := api.Mount("/v1")
+	v1.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		if _, err := w.Write([]byte("v1 test")); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	rec := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodGet, "/api/v1/test", http.NoBody)
+	bundle.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("got %d, want %d", rec.Code, http.StatusOK)
+	}
+	if rec.Body.String() != "v1 test" {
+		t.Errorf("got %q, want %q", rec.Body.String(), "v1 test")
+	}
 }
 
 func ExampleNew() {
