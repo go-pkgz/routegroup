@@ -15,7 +15,6 @@ type Bundle struct {
 	middlewares    []func(http.Handler) http.Handler // middlewares stack
 	rootRegistered struct {
 		once                       sync.Once // used to register a not found handler for the root path if no / route is registered
-		set                        bool      // true if the root path is registered in the mux
 		disableRootNotFoundHandler bool      // if true, the not found handler for the root path is not registered automatically
 		notFound                   http.HandlerFunc
 	}
@@ -36,14 +35,14 @@ func Mount(mux *http.ServeMux, basePath string) *Bundle {
 // ServeHTTP implements the http.Handler interface
 func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	b.rootRegistered.once.Do(func() {
-		if !b.rootRegistered.set && !b.rootRegistered.disableRootNotFoundHandler {
-			// register a not found handler for the root path if no / route is registered
+		if !b.rootRegistered.disableRootNotFoundHandler {
+			// register a not found handler for the root path unless it's disabled
 			// this is needed to be able to use middleware on all routes, for example logging
 			notFoundHandler := http.NotFoundHandler()
 			if b.rootRegistered.notFound != nil {
 				notFoundHandler = b.rootRegistered.notFound
 			}
-			b.register("/", notFoundHandler.ServeHTTP)
+			b.mux.HandleFunc("/", b.wrapMiddleware(notFoundHandler).ServeHTTP)
 		}
 	})
 	b.mux.ServeHTTP(w, r)
@@ -128,9 +127,11 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 		pattern = b.basePath + pattern
 	}
 
-	// check if the root path is registered
+	// if the pattern is the root path on / change it to /{$}
+	// this is needed to be able to keep / as a catch-all route and apply middleware to it.
+	// at the same time it kees handling the root request
 	if pattern == "/" || b.basePath+pattern == "/" {
-		b.rootRegistered.set = true
+		pattern = "/{$}"
 	}
 	b.mux.HandleFunc(pattern, b.wrapMiddleware(handler).ServeHTTP)
 }
