@@ -793,9 +793,14 @@ func TestHTTPServerWrap(t *testing.T) {
 		t.Errorf("Expected body 'test handler', got '%s'", string(body))
 	}
 }
+
 func TestHTTPServerWithDerived(t *testing.T) {
 	// create a new bundle with default middleware
 	bundle := routegroup.New(http.NewServeMux())
+	bundle.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("not found handler"))
+	})
 	bundle.Use(testMiddleware)
 
 	// mount a group with additional middleware on /api
@@ -809,6 +814,9 @@ func TestHTTPServerWithDerived(t *testing.T) {
 
 	group1.HandleFunc("GET /test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("GET test method handler"))
+	})
+	group1.HandleFunc("POST /", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("POST api / method handler"))
 	})
 
 	// add another group with middleware
@@ -923,6 +931,55 @@ func TestHTTPServerWithDerived(t *testing.T) {
 			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
 		}
 	})
+
+	t.Run("POST /api/", func(t *testing.T) {
+		resp, err := http.Post(testServer.URL+"/api/", "application/json", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if string(body) != "POST api / method handler" {
+			t.Errorf("Expected body 'GET auth-test method handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Auth-Middleware"); header != "" {
+			t.Errorf("Expected header X-Auth-Middleware to be empty, got '%s'", header)
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /api/", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/api/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, resp.StatusCode)
+		}
+		if string(body) != "not found handler" {
+			t.Errorf("Expected body '404 page not found', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Auth-Middleware"); header != "" {
+			t.Errorf("Expected header X-Auth-Middleware to be empty, got '%s'", header)
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
 	t.Run("GET /not-found", func(t *testing.T) {
 		resp, err := http.Get(testServer.URL + "/not-found")
 		if err != nil {
