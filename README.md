@@ -28,17 +28,6 @@ func main() {
     group := routegroup.New(mux)
 }
 ```
-**Setting optional `NotFoundHandler`**
-
-It is possible to set a custom `NotFoundHandler` for the group. This handler will be called when no other route matches the request:
-
-```go
-    group.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-        http.Error(w, "404 page not found, something is wrong!", http.StatusNotFound)
-    })
-```
-
-If the custom `NotFoundHandler` is not set, `routegroup` will automatically use a default handler from stdlib (`http.NotFoundHandler()`). 
 
 **Adding Routes with Middleware**
 
@@ -138,6 +127,19 @@ group.Route(func(b *routegroup.Bundle) {
 })
 ```
 
+**Setting optional `NotFoundHandler`**
+
+It is possible to set a custom `NotFoundHandler` for the group. This handler will be called when no other route matches the request:
+
+```go
+    group.NotFoundHandler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        http.Error(w, "404 page not found, something is wrong!", http.StatusNotFound)
+    })
+```
+
+If a custom `NotFoundHandler` is not configured, `routegroup` will default to using a handler from the standard library (`http.NotFoundHandler()`). It is important to note that the `NotFoundHandler` serves as a catch-all route, which influences "Method Not Allowed"  (405) responses. Consequently, if an incorrect method is called, the response will be 404 (or the custom status specified by the `NotFoundHandler`) rather than 405. This behavior aligns with the standard `http.ServeMux` and [may be improved](https://github.com/golang/go/issues/65648) in future versions of Go.
+
+
 ### Using derived groups
 
 In some instances, it's practical to create an initial group that includes a set of middlewares, and then derive all other groups from it. This approach guarantees that every group incorporates a common set of middlewares as a foundation, allowing each to add its specific middlewares. To facilitate this scenario, `routegroup` offers both `Bundle.Group` and `Bundle.Mount` methods, and it also implements the `http.Handler` interface. The following example illustrates how to use derived groups:
@@ -148,13 +150,12 @@ In some instances, it's practical to create an initial group that includes a set
 router := routegroup.New(http.NewServeMux()) 
 router.Use(loggingMiddleware, corsMiddleware)
 
-// add a new group with its own set of middlewares
+// add a new, derived group with its own set of middlewares
 // this group will inherit the middlewares from the base group
 apiGroup := router.Group()
 apiGroup.Use(apiMiddleware)
 apiGroup.Handle("GET /hello", helloHandler)
 apiGroup.Handle("GET /bye", byeHandler)
-
 
 // mount another group for the /admin path with its own set of middlewares, 
 // using `Route` method to show the alternative usage.

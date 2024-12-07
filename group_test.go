@@ -501,6 +501,27 @@ func TestHTTPServerWithRoot(t *testing.T) {
 			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
 		}
 	})
+
+	t.Run("GET /unknown-path", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/unknown-path")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, resp.StatusCode)
+		}
+		if string(body) != "404 page not found\n" {
+			t.Errorf("Expected body '404 page not found\n', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
 }
 
 func TestHTTPServerWithRoot122(t *testing.T) {
@@ -545,6 +566,48 @@ func TestHTTPServerWithRoot122(t *testing.T) {
 		}
 		if string(body) != "root handler" {
 			t.Errorf("Expected body 'root handler', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("POST /", func(t *testing.T) {
+		resp, err := http.Post(testServer.URL+"/", "application/json", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, resp.StatusCode)
+		}
+		if string(body) != "404 page not found\n" {
+			t.Errorf("Expected body '404 page not found\n', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("GET /unknown-path", func(t *testing.T) {
+		resp, err := http.Get(testServer.URL + "/unknown-path")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, resp.StatusCode)
+		}
+		if string(body) != "404 page not found\n" {
+			t.Errorf("Expected body '404 page not found\n', got '%s'", string(body))
 		}
 		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
 			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
