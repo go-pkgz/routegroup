@@ -123,8 +123,8 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 	matches := reGo122.FindStringSubmatch(pattern)
 	var path, method string
 	if len(matches) > 2 { // path in the form "GET /path/to/resource"
-		method = matches[1] // method part with a space
-		path = matches[2]   // path part from url pattern without method
+		method = matches[1]
+		path = matches[2]
 		pattern = method + " " + b.basePath + path
 	} else { // path is just "/path/to/resource"
 		path = pattern
