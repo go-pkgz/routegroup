@@ -956,6 +956,30 @@ func TestHTTPServerWithDerived(t *testing.T) {
 		}
 	})
 
+	t.Run("POST /api/not-found", func(t *testing.T) {
+		resp, err := http.Post(testServer.URL+"/api/not-found", "application/json", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, resp.StatusCode)
+		}
+		if string(body) != "not found handler" {
+			t.Errorf("Expected body '404 page not found', got '%s'", string(body))
+		}
+		if header := resp.Header.Get("X-Auth-Middleware"); header != "" {
+			t.Errorf("Expected header X-Auth-Middleware to be empty, got '%s'", header)
+		}
+		if header := resp.Header.Get("X-Test-Middleware"); header != "true" {
+			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
 	t.Run("GET /api/", func(t *testing.T) {
 		resp, err := http.Get(testServer.URL + "/api/")
 		if err != nil {

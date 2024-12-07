@@ -123,9 +123,9 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 	matches := reGo122.FindStringSubmatch(pattern)
 	var path, method string
 	if len(matches) > 2 { // path in the form "GET /path/to/resource"
-		pattern = matches[1] + " " + b.basePath + matches[2]
-		path = matches[2]         // path part from url pattern without method
-		method = matches[1] + " " // method part with a space
+		method = matches[1] // method part with a space
+		path = matches[2]   // path part from url pattern without method
+		pattern = method + " " + b.basePath + path
 	} else { // path is just "/path/to/resource"
 		path = pattern
 		pattern = b.basePath + pattern
@@ -135,8 +135,12 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 	// if the pattern is the root path on / change it to /{$}
 	// this is needed to be able to keep / as a catch-all route and apply middleware to it.
 	// at the same time, it keeps handling the root request
-	if pattern == "/" || b.basePath+pattern == "/" || b.basePath+path == "/" {
-		pattern = method + "/{$}" // preserve the method part if it was set
+	if pattern == "/" || path == "/" {
+		if method != "" { // preserve the method part if it was set
+			pattern = method + " " + b.basePath + "/{$}"
+		} else {
+			pattern = b.basePath + "/{$}" // no method part, just the path
+		}
 	}
 	b.mux.HandleFunc(pattern, b.wrapMiddleware(handler).ServeHTTP)
 }
