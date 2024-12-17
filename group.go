@@ -79,6 +79,9 @@ func (b *Bundle) Use(middleware func(http.Handler) http.Handler, more ...func(ht
 }
 
 // With adds new middleware(s) to the Group and returns a new Group with the updated middleware stack.
+// The With method is similar to Use, but instead of modifying the current Group,
+// it returns a new Group instance with the added middleware(s).
+// This allows for creating chain of middleware without affecting the original Group.
 func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(http.Handler) http.Handler) *Bundle {
 	newMiddlewares := make([]func(http.Handler) http.Handler, len(b.middlewares), len(b.middlewares)+len(more)+1)
 	copy(newMiddlewares, b.middlewares)
