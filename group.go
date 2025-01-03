@@ -185,8 +185,8 @@ func (b *Bundle) Route(configureFn func(*Bundle)) { configureFn(b) }
 
 // wrapMiddleware applies the registered middlewares to a handler.
 func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
-	for i := range b.middlewares {
-		handler = b.middlewares[len(b.middlewares)-1-i](handler)
+	for i := len(b.middlewares) - 1; i >= 0; i-- {
+		handler = b.middlewares[i](handler)
 	}
 	return handler
 }
