@@ -1,6 +1,6 @@
 linters-settings:
   govet:
-    check-shadowing: true
+    shadow: true
   gocyclo:
     min-complexity: 15
   maligned:
@@ -22,35 +22,38 @@ linters-settings:
 
 linters:
   enable:
-    - megacheck
+    - staticcheck
     - revive
     - govet
     - unconvert
-    - gas
+    - gosec
     - misspell
     - unparam
     - typecheck
     - ineffassign
     - stylecheck
     - gochecknoinits
-    - exportloopref
+    - copyloopvar
     - gocritic
     - nakedret
     - gosimple
     - prealloc
+    - unused
   fast: false
   disable-all: true
 
-run:
-  output:
-    format: tab
-  skip-dirs:
-    - vendor
 
+run:
+  concurrency: 4
 
 issues:
   exclude-rules:
     - text: "G114: Use of net/http serve function that has no support for setting timeouts"
       linters:
         - gosec
+    - linters:
+        - unparam
+        - revive
+      path: _test\.go$
+      text: "unused-parameter"
   exclude-use-default: false

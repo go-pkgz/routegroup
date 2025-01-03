@@ -5,6 +5,7 @@ package routegroup
 import (
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 )
 
@@ -96,7 +97,38 @@ func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(h
 
 // Handle adds a new route to the Group's mux, applying all middlewares to the handler.
 func (b *Bundle) Handle(pattern string, handler http.Handler) {
+	// for file server paths (ending with /), preserve the pattern and disable root not-found handler
+	if strings.HasSuffix(pattern, "/") {
+		if pattern == "/" {
+			b.rootRegistered.disableRootNotFoundHandler = true
+		}
+		fullPath := b.basePath + pattern
+		b.mux.Handle(fullPath, b.wrapMiddleware(handler))
+		return
+	}
 	b.register(pattern, handler.ServeHTTP)
+}
+
+// HandleFiles is a helper to serve static files from a directory
+func (b *Bundle) HandleFiles(pattern string, root http.FileSystem) {
+	// normalize pattern to always have trailing slash
+	if !strings.HasSuffix(pattern, "/") {
+		pattern += "/"
+	}
+
+	// build the full path for registration
+	fullPath := b.basePath + pattern
+
+	if pattern == "/" && b.basePath == "" {
+		// root case - serve directly without stripping
+		b.rootRegistered.disableRootNotFoundHandler = true
+		b.mux.Handle("/", b.wrapMiddleware(http.FileServer(root)))
+		return
+	}
+
+	// for both mounted groups and prefixed paths, strip the fullPath
+	handler := http.StripPrefix(strings.TrimSuffix(fullPath, "/"), http.FileServer(root))
+	b.mux.Handle(fullPath, b.wrapMiddleware(handler))
 }
 
 // HandleFunc registers the handler function for the given pattern to the Group's mux.
