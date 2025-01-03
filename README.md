@@ -184,6 +184,14 @@ http.ListenAndServe(":8080", mux)
 
 In case you want to disable this behavior, you can use the `DisableNotFoundHandler()` function.
 
+### HandleFiles helper
+
+`routegroup` provides a helper function `HandleFiles` that can be used to serve static files from a directory. The function is a thin wrapper around the standard `http.FileServer` and can be used to serve files from a specific directory. Here's an example:
+
+```go
+// serve static files from the "assets/static" directory
+router.HandleFiles("/static/", http.Dir("assets/static"))
+```
 
 ## Real-world example
 
