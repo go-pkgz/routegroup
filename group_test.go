@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 	"testing"
 
@@ -2148,6 +2149,99 @@ func TestIssue12StaticAndIndex(t *testing.T) {
 			t.Errorf("got %q, want login page", got)
 		}
 	})
+}
+
+func TestInvalidPatterns(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+
+	tests := []struct {
+		name      string
+		pattern   string
+		path      string // actual URL path to test
+		wantPanic bool
+	}{
+		{"empty pattern", "", "/", true},                                                // ServeMux panics on empty pattern
+		{"just spaces", "  ", "/", true},                                                // ServeMux panics on spaces-only pattern
+		{"spaces in path", "GET /path%20with%20spaces", "/path%20with%20spaces", false}, // encoded spaces work
+		{"only method", "GET", "/", true},                                               // ServeMux panics on invalid pattern
+		{"just one slash", "/", "/", false},                                             // root path works
+		{"missing slash", "GET /path", "/path", false},                                  // normal pattern
+		{"double slashes", "GET //path", "/", true},                                     // ServeMux panics on unclean paths
+		{"path without slash", "path", "/", true},                                       // must start with /
+		{"method path without slash", "GET path", "/", true},                            // must start with /
+		{"trailing slash", "GET /path/", "/path/", false},                               // trailing slash is ok
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("handler"))
+			}
+
+			if tt.wantPanic {
+				defer func() {
+					if r := recover(); r == nil {
+						t.Error("expected panic but got none")
+					}
+				}()
+				group.HandleFunc(tt.pattern, handler)
+				return
+			}
+
+			group.HandleFunc(tt.pattern, handler)
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, tt.path, http.NoBody)
+			group.ServeHTTP(rec, req)
+
+			if rec.Code == 0 {
+				t.Error("no response code set")
+			}
+		})
+	}
+}
+
+func TestMiddlewareOrder(t *testing.T) {
+	var order []string
+
+	mkMiddleware := func(name string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				order = append(order, "before "+name)
+				next.ServeHTTP(w, r)
+				order = append(order, "after "+name)
+			})
+		}
+	}
+
+	group := routegroup.New(http.NewServeMux())
+	group.Use(mkMiddleware("root"))
+
+	api := group.Mount("/api")
+	api.Use(mkMiddleware("api"))
+
+	users := api.With(mkMiddleware("users"))
+	users.HandleFunc("/action", func(w http.ResponseWriter, _ *http.Request) {
+		order = append(order, "handler")
+		_, _ = w.Write([]byte("ok"))
+	})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/action", http.NoBody)
+	group.ServeHTTP(rec, req)
+
+	expected := []string{
+		"before root",
+		"before api",
+		"before users",
+		"handler",
+		"after users",
+		"after api",
+		"after root",
+	}
+
+	if !reflect.DeepEqual(order, expected) {
+		t.Errorf("wrong middleware execution order\nwant: %v\ngot:  %v", expected, order)
+	}
 }
 
 func ExampleNew() {
