@@ -2378,6 +2378,14 @@ func TestSubgroupRootPathMatching(t *testing.T) {
 	// create a mounted group at /api/v1/users
 	usersGroup := router.Mount("/api/v1/users")
 
+	// add middleware to the group to test middleware invocation
+	usersGroup.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Users-Middleware", "applied")
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// register handler for the root of the mounted group using "/"
 	usersGroup.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("users root"))
@@ -2409,6 +2417,12 @@ func TestSubgroupRootPathMatching(t *testing.T) {
 		if string(body) != "users root" {
 			t.Errorf("expected 'users root', got %q", string(body))
 		}
+
+		// check middleware was applied
+		middlewareHeader := resp.Header.Get("X-Users-Middleware")
+		if middlewareHeader != "applied" {
+			t.Errorf("expected middleware header to be 'applied', got %q", middlewareHeader)
+		}
 	})
 
 	t.Run("with trailing slash", func(t *testing.T) {
@@ -2429,6 +2443,12 @@ func TestSubgroupRootPathMatching(t *testing.T) {
 		if string(body) != "users root" {
 			t.Errorf("expected 'users root', got %q", string(body))
 		}
+
+		// check middleware was applied
+		middlewareHeader := resp.Header.Get("X-Users-Middleware")
+		if middlewareHeader != "applied" {
+			t.Errorf("expected middleware header to be 'applied', got %q", middlewareHeader)
+		}
 	})
 
 	t.Run("child route", func(t *testing.T) {
@@ -2448,6 +2468,12 @@ func TestSubgroupRootPathMatching(t *testing.T) {
 		}
 		if string(body) != "users list" {
 			t.Errorf("expected 'users list', got %q", string(body))
+		}
+
+		// check middleware was applied
+		middlewareHeader := resp.Header.Get("X-Users-Middleware")
+		if middlewareHeader != "applied" {
+			t.Errorf("expected middleware header to be 'applied', got %q", middlewareHeader)
 		}
 	})
 }
