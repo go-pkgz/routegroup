@@ -2369,6 +2369,89 @@ func TestDeepNestedMounts(t *testing.T) {
 	}
 }
 
+// TestSubgroupRootPathMatching tests that a subgroup with a root path pattern (/)
+// properly matches requests to the exact path without a trailing slash.
+func TestSubgroupRootPathMatching(t *testing.T) {
+	mux := http.NewServeMux()
+	router := routegroup.New(mux)
+
+	// Create a mounted group at /api/v1/users
+	usersGroup := router.Mount("/api/v1/users")
+
+	// Register handler for the root of the mounted group using "/"
+	usersGroup.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("users root"))
+	})
+
+	// Also add a child route for comparison
+	usersGroup.HandleFunc("GET /list", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("users list"))
+	})
+
+	srv := httptest.NewServer(router)
+	defer srv.Close()
+
+	t.Run("exact match without trailing slash", func(t *testing.T) {
+		resp, err := http.Get(srv.URL + "/api/v1/users")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if string(body) != "users root" {
+			t.Errorf("expected 'users root', got %q", string(body))
+		}
+	})
+
+	t.Run("with trailing slash", func(t *testing.T) {
+		resp, err := http.Get(srv.URL + "/api/v1/users/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if string(body) != "users root" {
+			t.Errorf("expected 'users root', got %q", string(body))
+		}
+	})
+
+	t.Run("child route", func(t *testing.T) {
+		resp, err := http.Get(srv.URL + "/api/v1/users/list")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if string(body) != "users list" {
+			t.Errorf("expected 'users list', got %q", string(body))
+		}
+	})
+}
+
 func ExampleNew() {
 	group := routegroup.New(http.NewServeMux())
 
