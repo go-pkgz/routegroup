@@ -2375,15 +2375,15 @@ func TestSubgroupRootPathMatching(t *testing.T) {
 	mux := http.NewServeMux()
 	router := routegroup.New(mux)
 
-	// Create a mounted group at /api/v1/users
+	// create a mounted group at /api/v1/users
 	usersGroup := router.Mount("/api/v1/users")
 
-	// Register handler for the root of the mounted group using "/"
+	// register handler for the root of the mounted group using "/"
 	usersGroup.HandleFunc("GET /", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("users root"))
 	})
 
-	// Also add a child route for comparison
+	// also add a child route for comparison
 	usersGroup.HandleFunc("GET /list", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("users list"))
 	})
