@@ -46,6 +46,7 @@ func TestGroupMiddleware(t *testing.T) {
 		t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
 	}
 }
+
 func TestGroupHandle(t *testing.T) {
 	group := routegroup.New(http.NewServeMux())
 
@@ -484,6 +485,7 @@ func TestGroupWithMoreMiddleware(t *testing.T) {
 		t.Errorf("Expected header X-More-Middleware to be 'true', got '%s'", header)
 	}
 }
+
 func TestMount(t *testing.T) {
 	basePath := "/api"
 	group := routegroup.Mount(http.NewServeMux(), basePath)
@@ -2367,6 +2369,89 @@ func TestDeepNestedMounts(t *testing.T) {
 	if !reflect.DeepEqual(callOrder, expected) {
 		t.Errorf("middleware execution order mismatch\nwant: %v\ngot:  %v", expected, callOrder)
 	}
+}
+
+func TestNoTrailingSlash(t *testing.T) {
+	group := routegroup.New(http.NewServeMux())
+
+	sub := group.Mount("/sub")
+
+	// register handler for /{$}
+	group.HandleFunc("GET {$}", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("root"))
+	})
+
+	// register handler for /sub{$}
+	sub.HandleFunc("GET {$}", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("sub"))
+	})
+
+	srv := httptest.NewServer(group)
+	defer srv.Close()
+
+	t.Run("get root", func(t *testing.T) {
+		resp, err := http.Get(srv.URL + "/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if string(body) != "root" {
+			t.Errorf("expected 'root', got %q", string(body))
+		}
+	})
+
+	t.Run("get /any", func(t *testing.T) {
+		resp, err := http.Get(srv.URL + "/any")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected status 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("get /sub", func(t *testing.T) {
+		resp, err := http.Get(srv.URL + "/sub")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if string(body) != "sub" {
+			t.Errorf("expected 'sub', got %q", string(body))
+		}
+	})
+
+	t.Run("get /sub/", func(t *testing.T) {
+		resp, err := http.Get(srv.URL + "/sub/")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected status 404, got %d", resp.StatusCode)
+		}
+	})
 }
 
 func ExampleNew() {

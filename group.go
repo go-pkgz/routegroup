@@ -149,6 +149,24 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 		// method is not set intentionally here, the request pattern had no method part
 	}
 
+	// if the pattern is {$} and the base path doesn't end with a slash, change it to an empty string
+	// to support the special case of handling a mounted group url without trailing slash.
+	// This allows the following example to work:
+	//		router := routegroup.New(mux)
+	//		usersGroup := router.Mount("/api/v1/users")
+	//		usersGroup.Handle("{$}", handler) // this will handle /api/v1/users
+	//		usersGroup.Handle("/new", handler) // this will handle /api/v1/users/new
+	if path == "{$}" && !strings.HasSuffix(b.basePath, "/") {
+		if b.basePath == "" {
+			pattern = "/{$}"
+		} else {
+			pattern = b.basePath
+		}
+		if method != "" { // preserve the method part if it was set
+			pattern = method + " " + pattern
+		}
+	}
+
 	// if the pattern is the root path on / change it to /{$}
 	// this is needed to be able to keep / as a catch-all route and apply middleware to it.
 	// at the same time, it keeps handling the root request
