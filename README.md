@@ -142,7 +142,7 @@ If a custom `NotFoundHandler` is not configured, `routegroup` will default to us
 
 **Handling Root Paths Without Trailing Slashes**
 
-When working with mounted groups, you often need to handle requests to the group's root path without a trailing slash. For this purpose, `routegroup` provides the `HandleRoot` method:
+When working with mounted groups, you often need to handle requests to the group's root path without a trailing slash. For this purpose, `routegroup` provides the `HandleRoot` or `HandleRootFunc` methods:
 
 ```go
 // Create mounted groups
