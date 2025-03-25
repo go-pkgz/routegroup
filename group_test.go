@@ -46,6 +46,7 @@ func TestGroupMiddleware(t *testing.T) {
 		t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
 	}
 }
+
 func TestGroupHandle(t *testing.T) {
 	group := routegroup.New(http.NewServeMux())
 
@@ -484,6 +485,7 @@ func TestGroupWithMoreMiddleware(t *testing.T) {
 		t.Errorf("Expected header X-More-Middleware to be 'true', got '%s'", header)
 	}
 }
+
 func TestMount(t *testing.T) {
 	basePath := "/api"
 	group := routegroup.Mount(http.NewServeMux(), basePath)
@@ -2506,59 +2508,80 @@ func TestHandleRoot(t *testing.T) {
 				}
 			})
 		})
+		group.Mount("/api-2").Route(func(apiGroup *routegroup.Bundle) {
+			apiGroup.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("X-Middleware", "applied")
+					next.ServeHTTP(w, r)
+				})
+			})
+			apiGroup.HandleRootFunc("GET", func(w http.ResponseWriter, r *http.Request) {
+				if _, err := w.Write([]byte("api root")); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+			})
+			apiGroup.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
+				if _, err := w.Write([]byte("test")); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+			})
+		})
 
 		ts := httptest.NewServer(group)
 		defer ts.Close()
 
-		// test direct access to registered root /api - should NOT redirect and middleware should be applied
-		resp, err := client.Get(ts.URL + "/api")
-		if err != nil {
-			t.Fatalf("failed to make request: %v", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("expected status 200, got %d", resp.StatusCode)
-		}
-		if resp.Header.Get("X-Middleware") != "applied" {
-			t.Errorf("middleware not applied")
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-		if string(body) != "api root" {
-			t.Errorf("expected 'api root', got '%s'", body)
-		}
+		apis := []string{"/api", "/api-2"}
+		for _, api := range apis {
+			// test direct access to registered root /api - should NOT redirect and middleware should be applied
+			resp, err := client.Get(ts.URL + api)
+			if err != nil {
+				t.Fatalf("failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+			if resp.Header.Get("X-Middleware") != "applied" {
+				t.Errorf("middleware not applied")
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			if string(body) != "api root" {
+				t.Errorf("expected 'api root', got '%s'", body)
+			}
 
-		// test access to /api/test
-		resp, err = client.Get(ts.URL + "/api/test")
-		if err != nil {
-			t.Fatalf("failed to make request: %v", err)
-		}
-		defer resp.Body.Close()
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("expected status 200, got %d", resp.StatusCode)
-		}
-		if string(body) != "test" {
-			t.Errorf("expected 'test', got '%s'", body)
-		}
+			// test access to /api/test
+			resp, err = client.Get(ts.URL + api + "/test")
+			if err != nil {
+				t.Fatalf("failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+			if string(body) != "test" {
+				t.Errorf("expected 'test', got '%s'", body)
+			}
 
-		// test POST request to /api
-		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api", http.NoBody)
-		if err != nil {
-			t.Fatalf("failed to create request: %v", err)
-		}
-		resp, err = client.Do(req)
-		if err != nil {
-			t.Fatalf("failed to make request: %v", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound {
-			t.Errorf("expected status 404, got %d", resp.StatusCode)
+			// test POST request to /api
+			req, err := http.NewRequest(http.MethodPost, ts.URL+api, http.NoBody)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			resp, err = client.Do(req)
+			if err != nil {
+				t.Fatalf("failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusNotFound {
+				t.Errorf("expected status 404, got %d", resp.StatusCode)
+			}
 		}
 	})
 
@@ -2578,52 +2601,70 @@ func TestHandleRoot(t *testing.T) {
 				}
 			}))
 		})
+		group.Mount("/data-2").Route(func(dataGroup *routegroup.Bundle) {
+			dataGroup.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("X-Middleware", "applied")
+					next.ServeHTTP(w, r)
+				})
+			})
+			// register without specifying a method (empty string)
+			dataGroup.HandleRootFunc("", func(w http.ResponseWriter, r *http.Request) {
+				if _, err := w.Write([]byte("data root")); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+			})
+		})
 
 		ts := httptest.NewServer(group)
 		defer ts.Close()
 
-		// test GET request
-		resp, err := client.Get(ts.URL + "/data")
-		if err != nil {
-			t.Fatalf("failed to make request: %v", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("expected status 200, got %d", resp.StatusCode)
-		}
-		if resp.Header.Get("X-Middleware") != "applied" {
-			t.Errorf("middleware not applied")
-		}
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-		if string(body) != "data root" {
-			t.Errorf("expected 'data root', got '%s'", body)
-		}
+		paths := []string{"/data", "/data-2"}
 
-		// test POST request - should also work since no method was specified
-		req, err := http.NewRequest(http.MethodPost, ts.URL+"/data", http.NoBody)
-		if err != nil {
-			t.Fatalf("failed to create request: %v", err)
-		}
-		resp, err = client.Do(req)
-		if err != nil {
-			t.Fatalf("failed to make request: %v", err)
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("expected status 200, got %d", resp.StatusCode)
-		}
-		if resp.Header.Get("X-Middleware") != "applied" {
-			t.Errorf("middleware not applied")
-		}
-		body, err = io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatalf("failed to read response body: %v", err)
-		}
-		if string(body) != "data root" {
-			t.Errorf("expected 'data root', got '%s'", body)
+		for _, path := range paths {
+			// test GET request
+			resp, err := client.Get(ts.URL + path)
+			if err != nil {
+				t.Fatalf("failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+			if resp.Header.Get("X-Middleware") != "applied" {
+				t.Errorf("middleware not applied")
+			}
+			body, err := io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			if string(body) != "data root" {
+				t.Errorf("expected 'data root', got '%s'", body)
+			}
+
+			// test POST request - should also work since no method was specified
+			req, err := http.NewRequest(http.MethodPost, ts.URL+path, http.NoBody)
+			if err != nil {
+				t.Fatalf("failed to create request: %v", err)
+			}
+			resp, err = client.Do(req)
+			if err != nil {
+				t.Fatalf("failed to make request: %v", err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Errorf("expected status 200, got %d", resp.StatusCode)
+			}
+			if resp.Header.Get("X-Middleware") != "applied" {
+				t.Errorf("middleware not applied")
+			}
+			body, err = io.ReadAll(resp.Body)
+			if err != nil {
+				t.Fatalf("failed to read response body: %v", err)
+			}
+			if string(body) != "data root" {
+				t.Errorf("expected 'data root', got '%s'", body)
+			}
 		}
 	})
 
@@ -2643,6 +2684,47 @@ func TestHandleRoot(t *testing.T) {
 				t.Fatalf("failed to write response: %v", err)
 			}
 		}))
+
+		ts := httptest.NewServer(group)
+		defer ts.Close()
+
+		// test GET request to root
+		resp, err := client.Get(ts.URL + "/")
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if resp.Header.Get("X-Middleware") != "applied" {
+			t.Errorf("middleware not applied")
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+		if string(body) != "root" {
+			t.Errorf("expected 'root', got '%s'", body)
+		}
+	})
+
+	t.Run("HandleRootFunc with empty base path", func(t *testing.T) {
+		// create a group with empty base path
+		group := routegroup.New(http.NewServeMux())
+		group.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-Middleware", "applied")
+				next.ServeHTTP(w, r)
+			})
+		})
+
+		// handle the root path (empty base path)
+		group.HandleRootFunc("GET", func(w http.ResponseWriter, r *http.Request) {
+			if _, err := w.Write([]byte("root")); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
+		})
 
 		ts := httptest.NewServer(group)
 		defer ts.Close()
@@ -2696,7 +2778,6 @@ func TestHandleRoot(t *testing.T) {
 			t.Errorf("expected redirect to '/api/', got '%s'", location)
 		}
 	})
-
 }
 
 func ExampleNew() {
