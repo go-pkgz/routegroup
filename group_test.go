@@ -2537,7 +2537,7 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close()
+			defer resp.Body.Close() //nolint
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
@@ -2557,7 +2557,7 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close()
+			defer resp.Body.Close() //nolint
 			body, err = io.ReadAll(resp.Body)
 			if err != nil {
 				t.Fatalf("failed to read response body: %v", err)
@@ -2578,7 +2578,7 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close()
+			defer resp.Body.Close() //nolint
 			if resp.StatusCode != http.StatusNotFound {
 				t.Errorf("expected status 404, got %d", resp.StatusCode)
 			}
@@ -2627,7 +2627,7 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close()
+			defer resp.Body.Close() //nolint
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
@@ -2651,7 +2651,7 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close()
+			defer resp.Body.Close() //nolint
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
