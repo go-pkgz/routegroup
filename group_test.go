@@ -2627,6 +2627,47 @@ func TestHandleRoot(t *testing.T) {
 		}
 	})
 
+	t.Run("HandleRoot with empty base path", func(t *testing.T) {
+		// create a group with empty base path
+		group := routegroup.New(http.NewServeMux())
+		group.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-Middleware", "applied")
+				next.ServeHTTP(w, r)
+			})
+		})
+
+		// handle the root path (empty base path)
+		group.HandleRoot("GET", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, err := w.Write([]byte("root")); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
+		}))
+
+		ts := httptest.NewServer(group)
+		defer ts.Close()
+
+		// test GET request to root
+		resp, err := client.Get(ts.URL + "/")
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if resp.Header.Get("X-Middleware") != "applied" {
+			t.Errorf("middleware not applied")
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+		if string(body) != "root" {
+			t.Errorf("expected 'root', got '%s'", body)
+		}
+	})
+
 	t.Run("handle with trailing slash", func(t *testing.T) {
 		group := routegroup.New(http.NewServeMux())
 		apiGroup := group.Mount("/api")
