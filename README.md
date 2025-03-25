@@ -99,6 +99,36 @@ You can also apply middleware to specific routes inside the group without modify
 apiGroup.With(corsMiddleware, apiMiddleware).Handle("GET /hello", helloHandler)
 ```
 
+**Handling Root Paths Without Trailing Slashes**
+
+When working with mounted groups, you often need to handle requests to the group's root path without a trailing slash. For this purpose, `routegroup` provides the `HandleRoot` method:
+
+```go
+// Create mounted groups
+apiGroup := router.Mount("/api")
+v1Group := apiGroup.Mount("/v1")
+usersGroup := v1Group.Mount("/users")
+
+// Handle the root paths (no trailing slashes)
+apiGroup.HandleRoot("GET", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    // This handles requests to "/api" (without trailing slash)
+    w.Write([]byte("API Documentation"))
+}))
+
+usersGroup.HandleRoot("GET", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    // This handles requests to "/api/v1/users" (without trailing slash)
+    w.Write([]byte("List users"))
+}))
+
+// Different HTTP methods can be handled separately
+usersGroup.HandleRoot("POST", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+    // This handles POST requests to "/api/v1/users"
+    w.Write([]byte("Create user"))
+}))
+```
+
+While it's also possible to handle such paths using a trailing slash pattern (`"/"`) with the regular `Handle` or `HandleFunc` methods, that approach results in a redirect from non-trailing slash URLs (e.g., `/api`) to the trailing slash version (e.g., `/api/`). The `HandleRoot` method avoids this redirect, providing a more direct response and avoiding an extra round-trip, which is especially important for non-GET requests or when clients don't automatically follow redirects.
+
 **Alternative Usage with `Route`**
 
 You can also use the `Route` method to add routes and middleware in a single function call:

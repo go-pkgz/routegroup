@@ -2478,6 +2478,186 @@ func TestSubgroupRootPathMatching(t *testing.T) {
 	})
 }
 
+func TestHandleRoot(t *testing.T) {
+	// create client that doesn't follow redirects
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse // don't follow redirects
+		},
+	}
+
+	t.Run("HandleRoot with middleware", func(t *testing.T) {
+		group := routegroup.New(http.NewServeMux())
+		group.Mount("/api").Route(func(apiGroup *routegroup.Bundle) {
+			apiGroup.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("X-Middleware", "applied")
+					next.ServeHTTP(w, r)
+				})
+			})
+			apiGroup.HandleRoot("GET", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if _, err := w.Write([]byte("api root")); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+			}))
+			apiGroup.HandleFunc("GET /test", func(w http.ResponseWriter, r *http.Request) {
+				if _, err := w.Write([]byte("test")); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+			})
+		})
+
+		ts := httptest.NewServer(group)
+		defer ts.Close()
+
+		// test direct access to registered root /api - should NOT redirect and middleware should be applied
+		resp, err := client.Get(ts.URL + "/api")
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if resp.Header.Get("X-Middleware") != "applied" {
+			t.Errorf("middleware not applied")
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+		if string(body) != "api root" {
+			t.Errorf("expected 'api root', got '%s'", body)
+		}
+
+		// test access to /api/test
+		resp, err = client.Get(ts.URL + "/api/test")
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if string(body) != "test" {
+			t.Errorf("expected 'test', got '%s'", body)
+		}
+
+		// test POST request to /api
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/api", http.NoBody)
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		resp, err = client.Do(req)
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("expected status 404, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("HandleRoot without method", func(t *testing.T) {
+		group := routegroup.New(http.NewServeMux())
+		group.Mount("/data").Route(func(dataGroup *routegroup.Bundle) {
+			dataGroup.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("X-Middleware", "applied")
+					next.ServeHTTP(w, r)
+				})
+			})
+			// register without specifying a method (empty string)
+			dataGroup.HandleRoot("", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if _, err := w.Write([]byte("data root")); err != nil {
+					t.Fatalf("failed to write response: %v", err)
+				}
+			}))
+		})
+
+		ts := httptest.NewServer(group)
+		defer ts.Close()
+
+		// test GET request
+		resp, err := client.Get(ts.URL + "/data")
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if resp.Header.Get("X-Middleware") != "applied" {
+			t.Errorf("middleware not applied")
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+		if string(body) != "data root" {
+			t.Errorf("expected 'data root', got '%s'", body)
+		}
+
+		// test POST request - should also work since no method was specified
+		req, err := http.NewRequest(http.MethodPost, ts.URL+"/data", http.NoBody)
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		resp, err = client.Do(req)
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("expected status 200, got %d", resp.StatusCode)
+		}
+		if resp.Header.Get("X-Middleware") != "applied" {
+			t.Errorf("middleware not applied")
+		}
+		body, err = io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("failed to read response body: %v", err)
+		}
+		if string(body) != "data root" {
+			t.Errorf("expected 'data root', got '%s'", body)
+		}
+	})
+
+	t.Run("handle with trailing slash", func(t *testing.T) {
+		group := routegroup.New(http.NewServeMux())
+		apiGroup := group.Mount("/api")
+		apiGroup.HandleFunc("GET /", func(w http.ResponseWriter, r *http.Request) {
+			if _, err := w.Write([]byte("api root")); err != nil {
+				t.Fatalf("failed to write response: %v", err)
+			}
+		})
+
+		ts := httptest.NewServer(group)
+		defer ts.Close()
+
+		resp, err := client.Get(ts.URL + "/api")
+		if err != nil {
+			t.Fatalf("failed to make request: %v", err)
+		}
+		defer resp.Body.Close()
+
+		// verify trailing slash approach causes redirect
+		if resp.StatusCode != http.StatusMovedPermanently {
+			t.Errorf("expected redirect status 301, got %d", resp.StatusCode)
+		}
+
+		location := resp.Header.Get("Location")
+		if location != "/api/" {
+			t.Errorf("expected redirect to '/api/', got '%s'", location)
+		}
+	})
+
+}
+
 func ExampleNew() {
 	group := routegroup.New(http.NewServeMux())
 
@@ -2553,4 +2733,30 @@ func ExampleBundle_Route() {
 	if err := http.ListenAndServe(":8080", group); err != nil {
 		panic(err)
 	}
+}
+
+// This example shows how to use HandleRoot to handle the root path of a mounted group without trailing slash
+func ExampleBundle_HandleRoot() {
+	group := routegroup.New(http.NewServeMux())
+
+	// create API group
+	apiGroup := group.Mount("/api")
+
+	// apply middleware
+	apiGroup.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-API", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// handle root path (responds to /api without redirect)
+	apiGroup.HandleRoot("GET", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "API root")
+	}))
+
+	// regular routes
+	apiGroup.HandleFunc("GET /users", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "List of users")
+	})
 }
