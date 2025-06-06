@@ -137,7 +137,11 @@ group.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
 }
 ```
 
-If a custom `NotFoundHandler` is not configured, `routegroup` will default to using a handler from the standard library (`http.NotFoundHandler()`). It is important to note that the `NotFoundHandler` serves as a catch-all route, which influences "Method Not Allowed"  (405) responses. Consequently, if an incorrect method is called, the response will be 404 (or the custom status specified by the `NotFoundHandler`) rather than 405. This behavior aligns with the standard `http.ServeMux` and [may be improved](https://github.com/golang/go/issues/65648) in future versions of Go.
+If a custom `NotFoundHandler` is not configured, `routegroup` will default to using a handler from the standard library (`http.NotFoundHandler()`). 
+
+**Important Design Tradeoff**: The `NotFoundHandler` serves as a catch-all route, which affects HTTP method handling. When an incorrect HTTP method is used (e.g., POST to a GET-only route), the response will be 404 Not Found instead of 405 Method Not Allowed. This is a deliberate design choice that prioritizes applying middleware to ALL requests (including unregistered routes) over strict HTTP method semantics. This tradeoff enables important functionality like logging, security headers, and metrics collection on every request, even those to non-existent routes.
+
+If you prefer proper 405 responses over universal middleware coverage, you can disable this behavior using the `DisableNotFoundHandler()` method, though this means middleware will not run on requests to unregistered routes.
 
 
 **Handling Root Paths Without Trailing Slashes**
@@ -210,9 +214,18 @@ http.ListenAndServe(":8080", mux)
 
 ### Automatic registration of `NotFoundHandler` as catch-all route
 
-`routegroup` automatically registers a `NotFoundHandler` as a catch-all route, which is invoked when no other route matches the request. This handler is wrapped with all the middlewares that are associated with the group. This functionality is beneficial for applying middleware to all routes, including those that are unknown. It practically enables the use of middlewares that should operate across all routes, such as logging.
+`routegroup` automatically registers a `NotFoundHandler` as a catch-all route, which is invoked when no other route matches the request. This handler is wrapped with all the middlewares that are associated with the group. 
 
-In case you want to disable this behavior, you can use the `DisableNotFoundHandler()` function.
+**Why this is important**: This design ensures that middleware runs on ALL requests, not just registered routes. This is crucial for:
+- Logging every request for security and debugging
+- Applying security headers to all responses
+- Rate limiting and DDoS protection on invalid routes
+- Collecting metrics on 404 errors
+- Consistent error handling across the application
+
+Without this catch-all handler, requests to unregistered routes would bypass your middleware stack entirely, potentially creating security vulnerabilities or gaps in your observability.
+
+If you need proper 405 Method Not Allowed responses more than universal middleware coverage, you can disable this behavior using the `DisableNotFoundHandler()` function.
 
 ### HandleFiles helper
 
