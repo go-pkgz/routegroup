@@ -14,11 +14,11 @@ type Bundle struct {
 	basePath    string                            // base path for the group
 	middlewares []func(http.Handler) http.Handler // middlewares stack
 
-	// Optional custom 404 handler
+	// optional custom 404 handler
 	notFound http.HandlerFunc
 
 	// root points to the root bundle for global middleware application.
-	// For the root bundle, root == nil.
+	// for the root bundle, root == nil.
 	root *Bundle
 
 	// routesLocked indicates that routes have been registered on the root bundle
@@ -42,21 +42,21 @@ func Mount(mux *http.ServeMux, basePath string) *Bundle {
 
 // ServeHTTP implements the http.Handler interface
 func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Determine the matching handler and pattern first.
+	// determine the matching handler and pattern first.
 	h, pattern := b.mux.Handler(r)
 
-	// Resolve the root bundle (where global middlewares live).
+	// resolve the root bundle (where global middlewares live).
 	root := b
 	if b.root != nil {
 		root = b.root
 	}
 
-	// If no route matched (empty pattern), replace with custom not found if provided.
+	// if no route matched (empty pattern), replace with custom not found if provided.
 	if pattern == "" && root.notFound != nil {
 		h = root.notFound
 	}
 
-	// Apply root (global) middlewares around the resolved handler and serve the request.
+	// apply root (global) middlewares around the resolved handler and serve the request.
 	root.wrapGlobal(h).ServeHTTP(w, r)
 }
 
@@ -74,12 +74,12 @@ func (b *Bundle) Mount(basePath string) *Bundle {
 
 // Use adds middleware(s) to the Group.
 func (b *Bundle) Use(middleware func(http.Handler) http.Handler, more ...func(http.Handler) http.Handler) {
-    // Disallow adding middlewares after any routes have been registered on this bundle.
-    if b.routesLocked {
-        panic("routegroup: Use called after routes were registered on this bundle; add middlewares before registering routes or use Group/With for scoped middleware")
-    }
-    b.middlewares = append(b.middlewares, middleware)
-    b.middlewares = append(b.middlewares, more...)
+	// disallow adding middlewares after any routes have been registered on this bundle.
+	if b.routesLocked {
+		panic("routegroup: Use called after routes were registered on this bundle; add middlewares before registering routes or use Group/With for scoped middleware")
+	}
+	b.middlewares = append(b.middlewares, middleware)
+	b.middlewares = append(b.middlewares, more...)
 }
 
 // With adds new middleware(s) to the Group and returns a new Group with the updated middleware stack.
@@ -103,8 +103,8 @@ func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(h
 
 // Handle adds a new route to the Group's mux, applying all middlewares to the handler.
 func (b *Bundle) Handle(pattern string, handler http.Handler) {
-	// lock root on first route registration
-	b.lockRoot()
+	b.lockRoot() // lock root on first route registration
+
 	// for file server paths (ending with /), preserve the pattern and disable root not-found handler
 	if strings.HasSuffix(pattern, "/") {
 		fullPath := b.basePath + pattern
@@ -116,8 +116,8 @@ func (b *Bundle) Handle(pattern string, handler http.Handler) {
 
 // HandleFiles is a helper to serve static files from a directory
 func (b *Bundle) HandleFiles(pattern string, root http.FileSystem) {
-	// lock root on first route registration
-	b.lockRoot()
+	b.lockRoot() // lock root on first route registration
+
 	// normalize pattern to always have trailing slash
 	if !strings.HasSuffix(pattern, "/") {
 		pattern += "/"
@@ -155,7 +155,7 @@ func (b *Bundle) DisableNotFoundHandler() {}
 
 // NotFoundHandler sets a custom handler for the root path if no / route is registered.
 func (b *Bundle) NotFoundHandler(handler http.HandlerFunc) {
-	// Always set on the root bundle so custom 404 works regardless of which bundle serves.
+	// always set on the root bundle so custom 404 works regardless of which bundle serves.
 	if b.root != nil {
 		b.root.notFound = handler
 		return
@@ -163,12 +163,11 @@ func (b *Bundle) NotFoundHandler(handler http.HandlerFunc) {
 	b.notFound = handler
 }
 
-// Matches non-space characters, spaces, then anything, i.e. "GET /path/to/resource"
+// matches non-space characters, spaces, then anything, i.e. "GET /path/to/resource"
 var reGo122 = regexp.MustCompile(`^(\S+)\s+(.+)$`)
 
 func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
-	// lock root on first route registration
-	b.lockRoot()
+	b.lockRoot() // lock root on first route registration
 	matches := reGo122.FindStringSubmatch(pattern)
 	var path, method string
 	if len(matches) > 2 { // path in the form "GET /path/to/resource"
@@ -202,8 +201,8 @@ func (b *Bundle) Route(configureFn func(*Bundle)) { configureFn(b) }
 // avoiding the redirect behavior while still applying middleware.
 // Method parameter can be empty; in this case, the handler will be registered for all methods.
 func (b *Bundle) HandleRoot(method string, handler http.Handler) {
-	// lock root on first route registration
-	b.lockRoot()
+	b.lockRoot() // lock root on first route registration
+
 	// for empty base path, use "/" to match the root
 	pattern := b.basePath
 	if pattern == "" {
@@ -225,8 +224,8 @@ func (b *Bundle) HandleRoot(method string, handler http.Handler) {
 // avoiding the redirect behavior while still applying middleware.
 // Method parameter can be empty; in this case, the handler will be registered for all methods.
 func (b *Bundle) HandleRootFunc(method string, handler http.HandlerFunc) {
-	// lock root on first route registration
-	b.lockRoot()
+	b.lockRoot() // lock root on first route registration
+
 	// for empty base path, use "/" to match the root
 	pattern := b.basePath
 	if pattern == "" {
@@ -243,7 +242,7 @@ func (b *Bundle) HandleRootFunc(method string, handler http.HandlerFunc) {
 
 // wrapMiddleware applies the registered middlewares to a handler.
 func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
-	// Apply only local middlewares (exclude root/global ones to avoid double application).
+	// apply only local middlewares (exclude root/global ones to avoid double application).
 	start := 0
 	if b.root != nil {
 		if b.rootCount < len(b.middlewares) {
@@ -281,7 +280,7 @@ func Wrap(handler http.Handler, mw1 func(http.Handler) http.Handler, mws ...func
 
 // wrapGlobal applies only the root bundle's middlewares to the provided handler.
 func (b *Bundle) wrapGlobal(handler http.Handler) http.Handler {
-	// Resolve root bundle
+	// resolve root bundle
 	root := b
 	if b.root != nil {
 		root = b.root
