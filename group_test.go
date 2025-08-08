@@ -2495,7 +2495,6 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close() //nolint
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
@@ -2509,13 +2508,15 @@ func TestHandleRoot(t *testing.T) {
 			if string(body) != "api root" {
 				t.Errorf("expected 'api root', got '%s'", body)
 			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("failed to close response body: %v", closeErr)
+			}
 
 			// test access to /api/test
 			resp, err = client.Get(ts.URL + api + "/test")
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close() //nolint
 			body, err = io.ReadAll(resp.Body)
 			if err != nil {
 				t.Fatalf("failed to read response body: %v", err)
@@ -2525,6 +2526,9 @@ func TestHandleRoot(t *testing.T) {
 			}
 			if string(body) != "test" {
 				t.Errorf("expected 'test', got '%s'", body)
+			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("failed to close response body: %v", closeErr)
 			}
 
 			// test POST request to /api
@@ -2536,13 +2540,15 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close() //nolint
             if resp.StatusCode != http.StatusMethodNotAllowed {
                 t.Errorf("expected status 405, got %d", resp.StatusCode)
             }
             if allow := resp.Header.Get("Allow"); !strings.Contains(allow, http.MethodGet) {
                 t.Errorf("expected Allow header to contain GET, got %q", allow)
             }
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("failed to close response body: %v", closeErr)
+			}
 		}
 	})
 
@@ -2588,7 +2594,6 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close() //nolint
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
@@ -2602,6 +2607,9 @@ func TestHandleRoot(t *testing.T) {
 			if string(body) != "data root" {
 				t.Errorf("expected 'data root', got '%s'", body)
 			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("failed to close response body: %v", closeErr)
+			}
 
 			// test POST request - should also work since no method was specified
 			req, err := http.NewRequest(http.MethodPost, ts.URL+path, http.NoBody)
@@ -2612,7 +2620,6 @@ func TestHandleRoot(t *testing.T) {
 			if err != nil {
 				t.Fatalf("failed to make request: %v", err)
 			}
-			defer resp.Body.Close() //nolint
 			if resp.StatusCode != http.StatusOK {
 				t.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
@@ -2625,6 +2632,9 @@ func TestHandleRoot(t *testing.T) {
 			}
 			if string(body) != "data root" {
 				t.Errorf("expected 'data root', got '%s'", body)
+			}
+			if closeErr := resp.Body.Close(); closeErr != nil {
+				t.Errorf("failed to close response body: %v", closeErr)
 			}
 		}
 	})
