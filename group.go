@@ -42,22 +42,28 @@ func Mount(mux *http.ServeMux, basePath string) *Bundle {
 
 // ServeHTTP implements the http.Handler interface
 func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// determine the matching handler and pattern first.
-	h, pattern := b.mux.Handler(r)
-
 	// resolve the root bundle (where global middlewares live).
 	root := b
 	if b.root != nil {
 		root = b.root
 	}
 
-	// if no route matched (empty pattern), replace with custom not found if provided.
-	if pattern == "" && root.notFound != nil {
-		h = root.notFound
-	}
+	// create a handler that will let the mux do its routing (including setting path parameters)
+	// but intercept 404s to use custom handler if provided
+	muxHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// check if a route exists for this request
+		_, pattern := b.mux.Handler(r)
+		if pattern == "" && root.notFound != nil {
+			// no route matched, use custom 404 handler
+			root.notFound.ServeHTTP(w, r)
+			return
+		}
+		// let the mux handle the request normally (this sets path parameters)
+		b.mux.ServeHTTP(w, r)
+	})
 
-	// apply root (global) middlewares around the resolved handler and serve the request.
-	root.wrapGlobal(h).ServeHTTP(w, r)
+	// apply root (global) middlewares around the mux handler and serve the request.
+	root.wrapGlobal(muxHandler).ServeHTTP(w, r)
 }
 
 // Group creates a new group with the same middleware stack as the original on top of the existing bundle.
