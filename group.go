@@ -120,7 +120,7 @@ func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(h
 func (b *Bundle) Handle(pattern string, handler http.Handler) {
 	b.lockRoot() // lock root on first route registration
 
-	// for file server paths (ending with /), preserve the pattern and disable root not-found handler
+	// for file server paths (ending with /), preserve the pattern as-is
 	if strings.HasSuffix(pattern, "/") {
 		fullPath := b.basePath + pattern
 		b.mux.Handle(fullPath, b.wrapMiddleware(handler))
@@ -257,20 +257,17 @@ func (b *Bundle) HandleRootFunc(method string, handler http.HandlerFunc) {
 
 // wrapMiddleware applies the registered middlewares to a handler.
 func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
-	// apply only local middlewares (exclude root/global ones to avoid double application).
-	start := 0
-	if b.root != nil {
-		// this is a child bundle, apply only middlewares added after mounting
-		if b.rootCount < len(b.middlewares) {
-			start = b.rootCount
-		} else {
-			start = len(b.middlewares)
-		}
-	} else {
-		// this is the root bundle itself, don't apply any middlewares here
-		// they will be applied globally in ServeHTTP via wrapGlobal
+	// root bundle: don't apply middlewares here, they're applied globally in ServeHTTP
+	if b.root == nil {
 		return handler
 	}
+	
+	// child bundle: apply only middlewares added after mounting (exclude inherited root middlewares)
+	start := b.rootCount
+	if start > len(b.middlewares) {
+		start = len(b.middlewares) // safety: ensure start doesn't exceed bounds
+	}
+	
 	for i := len(b.middlewares) - 1; i >= start; i-- {
 		handler = b.middlewares[i](handler)
 	}
