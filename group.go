@@ -48,11 +48,20 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		root = b.root
 	}
 
+	// get the handler and pattern for this request
+	_, pattern := b.mux.Handler(r)
+	
+	// if a pattern was found, create a shallow copy of the request with the pattern set
+	// this allows global middlewares to see the pattern before mux.ServeHTTP is called
+	if pattern != "" {
+		r2 := *r
+		r2.Pattern = pattern
+		r = &r2
+	}
+
 	// create a handler that will let the mux do its routing (including setting path parameters)
 	// but intercept 404s to use custom handler if provided
 	muxHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// check if a route exists for this request
-		_, pattern := b.mux.Handler(r)
 		if pattern == "" && root.notFound != nil {
 			// no route matched, use custom 404 handler
 			root.notFound.ServeHTTP(w, r)
@@ -251,11 +260,16 @@ func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
 	// apply only local middlewares (exclude root/global ones to avoid double application).
 	start := 0
 	if b.root != nil {
+		// this is a child bundle, apply only middlewares added after mounting
 		if b.rootCount < len(b.middlewares) {
 			start = b.rootCount
 		} else {
 			start = len(b.middlewares)
 		}
+	} else {
+		// this is the root bundle itself, don't apply any middlewares here
+		// they will be applied globally in ServeHTTP via wrapGlobal
+		return handler
 	}
 	for i := len(b.middlewares) - 1; i >= start; i-- {
 		handler = b.middlewares[i](handler)

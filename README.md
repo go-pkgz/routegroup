@@ -12,6 +12,10 @@
 - Fully compatible with the `http.Handler` interface and can be used as a drop-in replacement for `http.ServeMux`.
 - No external dependencies.
 
+## Requirements
+
+- Go 1.23 or higher
+
 ## Install and update
 
 `go get -u github.com/go-pkgz/routegroup`
