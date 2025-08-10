@@ -50,7 +50,7 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// get the handler and pattern for this request
 	_, pattern := b.mux.Handler(r)
-	
+
 	// if a pattern was found, create a shallow copy of the request with the pattern set
 	// this allows global middlewares to see the pattern before mux.ServeHTTP is called
 	if pattern != "" {
@@ -209,12 +209,9 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 // Route allows for configuring the Group inside the configureFn function.
 func (b *Bundle) Route(configureFn func(*Bundle)) { configureFn(b) }
 
-// HandleRoot adds a handler for the group's root path (no trailing slash).
-// This method is needed to handle requests to a group's root path without causing redirects that would occur with trailing slash patterns.
-// Unlike registering a pattern with "/", which causes the standard ServeMux to redirect non-trailing slash requests to the trailing slash
-// version (301 Moved Permanently), HandleRoot registers the exact path without any special treatment,
-// avoiding the redirect behavior while still applying middleware.
-// Method parameter can be empty; in this case, the handler will be registered for all methods.
+// HandleRoot adds a handler for the group's root path without trailing slash.
+// This avoids the 301 redirect that would occur with a "/" pattern.
+// Method parameter can be empty to register for all HTTP methods.
 func (b *Bundle) HandleRoot(method string, handler http.Handler) {
 	b.lockRoot() // lock root on first route registration
 
@@ -232,12 +229,7 @@ func (b *Bundle) HandleRoot(method string, handler http.Handler) {
 	b.mux.Handle(pattern, b.wrapMiddleware(handler))
 }
 
-// HandleRootFunc register the handler function for the group's root path (no trailing slash).
-// This method is needed to handle requests to a group's root path without causing redirects that would occur with trailing slash patterns.
-// Unlike registering a pattern with "/", which causes the standard ServeMux to redirect non-trailing slash requests to the trailing slash
-// version (301 Moved Permanently), HandleRoot registers the exact path without any special treatment,
-// avoiding the redirect behavior while still applying middleware.
-// Method parameter can be empty; in this case, the handler will be registered for all methods.
+// HandleRootFunc is like HandleRoot but takes a handler function.
 func (b *Bundle) HandleRootFunc(method string, handler http.HandlerFunc) {
 	b.lockRoot() // lock root on first route registration
 
@@ -261,13 +253,13 @@ func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
 	if b.root == nil {
 		return handler
 	}
-	
+
 	// child bundle: apply only middlewares added after mounting (exclude inherited root middlewares)
 	start := b.rootCount
 	if start > len(b.middlewares) {
 		start = len(b.middlewares) // safety: ensure start doesn't exceed bounds
 	}
-	
+
 	for i := len(b.middlewares) - 1; i >= start; i-- {
 		handler = b.middlewares[i](handler)
 	}
