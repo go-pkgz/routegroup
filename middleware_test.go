@@ -1185,3 +1185,89 @@ func TestRequestPatternAndMiddlewareCallCount(t *testing.T) {
 		}
 	})
 }
+
+// TestRequestIsolation verifies that the original request passed to ServeHTTP
+// is not modified, ensuring proper isolation through shallow copy.
+func TestRequestIsolation(t *testing.T) {
+	t.Run("original request not modified", func(t *testing.T) {
+		router := routegroup.New(http.NewServeMux())
+		
+		var middlewareRequest *http.Request
+		
+		// middleware that captures the request object
+		router.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				middlewareRequest = r
+				next.ServeHTTP(w, r)
+			})
+		})
+		
+		router.HandleFunc("GET /test/{id}", func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		})
+		
+		// create the original request
+		originalRequest, err := http.NewRequest(http.MethodGet, "/test/123", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		// save original state
+		originalPattern := originalRequest.Pattern
+		
+		// make the request
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, originalRequest)
+		
+		// verify the original request was not modified
+		if originalRequest.Pattern != originalPattern {
+			t.Errorf("original request was modified: Pattern changed from %q to %q", 
+				originalPattern, originalRequest.Pattern)
+		}
+		
+		// verify middleware received a different request object (shallow copy)
+		if middlewareRequest == originalRequest {
+			t.Error("middleware received the same request object (expected a copy)")
+		}
+		
+		// verify middleware's request has the pattern set
+		if middlewareRequest.Pattern == "" {
+			t.Error("middleware's request should have Pattern set")
+		}
+	})
+	
+	t.Run("isolation with 404", func(t *testing.T) {
+		router := routegroup.New(http.NewServeMux())
+		
+		router.NotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		})
+		
+		router.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-Middleware", "ran")
+				next.ServeHTTP(w, r)
+			})
+		})
+		
+		originalRequest, err := http.NewRequest(http.MethodGet, "/non-existent", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		
+		originalPattern := originalRequest.Pattern
+		
+		recorder := httptest.NewRecorder()
+		router.ServeHTTP(recorder, originalRequest)
+		
+		if recorder.Code != http.StatusNotFound {
+			t.Errorf("expected 404, got %d", recorder.Code)
+		}
+		
+		// original request should not be modified
+		if originalRequest.Pattern != originalPattern {
+			t.Errorf("original request was modified: Pattern changed from %q to %q", 
+				originalPattern, originalRequest.Pattern)
+		}
+	})
+}
