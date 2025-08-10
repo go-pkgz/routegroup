@@ -45,6 +45,38 @@ func TestGroupMiddleware(t *testing.T) {
 	}
 }
 
+func TestMountedBundleServeHTTP(t *testing.T) {
+	// test ServeHTTP when called directly on a mounted bundle
+	root := routegroup.New(http.NewServeMux())
+	root.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Root-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+	
+	mounted := root.Mount("/api")
+	mounted.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("mounted handler"))
+	})
+	
+	// serve directly from the mounted bundle (not typical usage but should work)
+	recorder := httptest.NewRecorder()
+	request, _ := http.NewRequest(http.MethodGet, "/api/test", http.NoBody)
+	mounted.ServeHTTP(recorder, request)
+	
+	if recorder.Code != http.StatusOK {
+		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if body := recorder.Body.String(); body != "mounted handler" {
+		t.Errorf("Expected body 'mounted handler', got '%s'", body)
+	}
+	// should still apply root middleware when serving from mounted
+	if header := recorder.Header().Get("X-Root-Middleware"); header != "true" {
+		t.Errorf("Expected X-Root-Middleware header to be 'true', got '%s'", header)
+	}
+}
+
 func TestGroupHandle(t *testing.T) {
 	group := routegroup.New(http.NewServeMux())
 
