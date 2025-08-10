@@ -88,6 +88,11 @@ func (b *Bundle) Mount(basePath string) *Bundle {
 }
 
 // Use adds middleware(s) to the Group.
+// Middlewares are executed in the order they are added.
+// Note: Root-level middlewares (added to the root bundle) have access to the matched
+// route pattern via r.Pattern, but execute before path parameters are parsed.
+// Therefore, r.PathValue() will return empty strings in root middlewares.
+// Middlewares on mounted groups execute after routing and have full access to path values.
 func (b *Bundle) Use(middleware func(http.Handler) http.Handler, more ...func(http.Handler) http.Handler) {
 	// disallow adding middlewares after any routes have been registered on this bundle.
 	if b.routesLocked {

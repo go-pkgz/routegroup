@@ -15,6 +15,7 @@
 ## Requirements
 
 - Go 1.23 or higher
+  *(This library uses `http.Request.Pattern` to make route patterns available to global middlewares and relies on the enhanced `http.ServeMux` routing behavior introduced in Go 1.22/1.23)*
 
 ## Install and update
 
