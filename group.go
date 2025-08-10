@@ -48,11 +48,20 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		root = b.root
 	}
 
+	// get the handler and pattern for this request
+	_, pattern := b.mux.Handler(r)
+
+	// if a pattern was found, create a shallow copy of the request with the pattern set
+	// this allows global middlewares to see the pattern before mux.ServeHTTP is called
+	if pattern != "" {
+		r2 := *r
+		r2.Pattern = pattern
+		r = &r2
+	}
+
 	// create a handler that will let the mux do its routing (including setting path parameters)
 	// but intercept 404s to use custom handler if provided
 	muxHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// check if a route exists for this request
-		_, pattern := b.mux.Handler(r)
 		if pattern == "" && root.notFound != nil {
 			// no route matched, use custom 404 handler
 			root.notFound.ServeHTTP(w, r)
@@ -79,6 +88,11 @@ func (b *Bundle) Mount(basePath string) *Bundle {
 }
 
 // Use adds middleware(s) to the Group.
+// Middlewares are executed in the order they are added.
+// Note: Root-level middlewares (added to the root bundle) have access to the matched
+// route pattern via r.Pattern, but execute before path parameters are parsed.
+// Therefore, r.PathValue() will return empty strings in root middlewares.
+// Middlewares on mounted groups execute after routing and have full access to path values.
 func (b *Bundle) Use(middleware func(http.Handler) http.Handler, more ...func(http.Handler) http.Handler) {
 	// disallow adding middlewares after any routes have been registered on this bundle.
 	if b.routesLocked {
@@ -111,7 +125,7 @@ func (b *Bundle) With(middleware func(http.Handler) http.Handler, more ...func(h
 func (b *Bundle) Handle(pattern string, handler http.Handler) {
 	b.lockRoot() // lock root on first route registration
 
-	// for file server paths (ending with /), preserve the pattern and disable root not-found handler
+	// for file server paths (ending with /), preserve the pattern as-is
 	if strings.HasSuffix(pattern, "/") {
 		fullPath := b.basePath + pattern
 		b.mux.Handle(fullPath, b.wrapMiddleware(handler))
@@ -200,12 +214,9 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 // Route allows for configuring the Group inside the configureFn function.
 func (b *Bundle) Route(configureFn func(*Bundle)) { configureFn(b) }
 
-// HandleRoot adds a handler for the group's root path (no trailing slash).
-// This method is needed to handle requests to a group's root path without causing redirects that would occur with trailing slash patterns.
-// Unlike registering a pattern with "/", which causes the standard ServeMux to redirect non-trailing slash requests to the trailing slash
-// version (301 Moved Permanently), HandleRoot registers the exact path without any special treatment,
-// avoiding the redirect behavior while still applying middleware.
-// Method parameter can be empty; in this case, the handler will be registered for all methods.
+// HandleRoot adds a handler for the group's root path without trailing slash.
+// This avoids the 301 redirect that would occur with a "/" pattern.
+// Method parameter can be empty to register for all HTTP methods.
 func (b *Bundle) HandleRoot(method string, handler http.Handler) {
 	b.lockRoot() // lock root on first route registration
 
@@ -223,12 +234,7 @@ func (b *Bundle) HandleRoot(method string, handler http.Handler) {
 	b.mux.Handle(pattern, b.wrapMiddleware(handler))
 }
 
-// HandleRootFunc register the handler function for the group's root path (no trailing slash).
-// This method is needed to handle requests to a group's root path without causing redirects that would occur with trailing slash patterns.
-// Unlike registering a pattern with "/", which causes the standard ServeMux to redirect non-trailing slash requests to the trailing slash
-// version (301 Moved Permanently), HandleRoot registers the exact path without any special treatment,
-// avoiding the redirect behavior while still applying middleware.
-// Method parameter can be empty; in this case, the handler will be registered for all methods.
+// HandleRootFunc is like HandleRoot but takes a handler function.
 func (b *Bundle) HandleRootFunc(method string, handler http.HandlerFunc) {
 	b.lockRoot() // lock root on first route registration
 
@@ -248,15 +254,17 @@ func (b *Bundle) HandleRootFunc(method string, handler http.HandlerFunc) {
 
 // wrapMiddleware applies the registered middlewares to a handler.
 func (b *Bundle) wrapMiddleware(handler http.Handler) http.Handler {
-	// apply only local middlewares (exclude root/global ones to avoid double application).
-	start := 0
-	if b.root != nil {
-		if b.rootCount < len(b.middlewares) {
-			start = b.rootCount
-		} else {
-			start = len(b.middlewares)
-		}
+	// root bundle: don't apply middlewares here, they're applied globally in ServeHTTP
+	if b.root == nil {
+		return handler
 	}
+
+	// child bundle: apply only middlewares added after mounting (exclude inherited root middlewares)
+	start := b.rootCount
+	if start > len(b.middlewares) {
+		start = len(b.middlewares) // safety: ensure start doesn't exceed bounds
+	}
+
 	for i := len(b.middlewares) - 1; i >= start; i-- {
 		handler = b.middlewares[i](handler)
 	}

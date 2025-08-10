@@ -195,3 +195,41 @@ func TestDisableNotFoundHandlerAfterRouteRegistration(t *testing.T) {
 		t.Errorf("got %q, want %q", rec.Body.String(), "404 page not found\n")
 	}
 }
+
+func TestNotFoundHandlerOnMountedGroup(t *testing.T) {
+	// test that NotFoundHandler sets handler on root when called on mounted group
+	root := routegroup.New(http.NewServeMux())
+	mounted := root.Mount("/api")
+	
+	// set NotFoundHandler on mounted group - should set it on root
+	mounted.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "Custom 404 from mounted", http.StatusNotFound)
+	})
+	
+	// add a route to the mounted group
+	mounted.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("test"))
+	})
+	
+	testServer := httptest.NewServer(root)
+	defer testServer.Close()
+	
+	// test that custom 404 works for non-matching routes
+	resp, err := http.Get(testServer.URL + "/unknown")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	
+	if resp.StatusCode != http.StatusNotFound {
+		t.Errorf("got status %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+	if string(body) != "Custom 404 from mounted\n" {
+		t.Errorf("got body %q, want %q", string(body), "Custom 404 from mounted\n")
+	}
+}
