@@ -54,17 +54,17 @@ func TestMountedBundleServeHTTP(t *testing.T) {
 			next.ServeHTTP(w, r)
 		})
 	})
-	
+
 	mounted := root.Mount("/api")
 	mounted.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("mounted handler"))
 	})
-	
+
 	// serve directly from the mounted bundle (not typical usage but should work)
 	recorder := httptest.NewRecorder()
 	request, _ := http.NewRequest(http.MethodGet, "/api/test", http.NoBody)
 	mounted.ServeHTTP(recorder, request)
-	
+
 	if recorder.Code != http.StatusOK {
 		t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
 	}
