@@ -293,15 +293,13 @@ func TestHTTPServerWithDerived(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer resp.Body.Close()
-		body, err := io.ReadAll(resp.Body)
-		if err != nil {
-			t.Fatal(err)
+		// should return 405 Method Not Allowed since POST / is registered but not GET /
+		if resp.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("Expected status code %d, got %d", http.StatusMethodNotAllowed, resp.StatusCode)
 		}
-		if resp.StatusCode != http.StatusNotFound {
-			t.Errorf("Expected status code %d, got %d", http.StatusNotFound, resp.StatusCode)
-		}
-		if string(body) != "not found handler" {
-			t.Errorf("Expected body '404 page not found', got '%s'", string(body))
+		// 405 response should include Allow header
+		if allowHeader := resp.Header.Get("Allow"); allowHeader == "" {
+			t.Error("Expected Allow header for 405 response")
 		}
 		if header := resp.Header.Get("X-Auth-Middleware"); header != "" {
 			t.Errorf("Expected header X-Auth-Middleware to be empty, got '%s'", header)

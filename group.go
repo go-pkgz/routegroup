@@ -63,7 +63,19 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// but intercept 404s to use custom handler if provided
 	muxHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if pattern == "" && root.notFound != nil {
-			// no route matched, use custom 404 handler
+			// no route matched, need to check if it's a true 404 or a 405
+			// probe the mux to see what status it would return
+			probe := &statusRecorder{status: http.StatusOK}
+			b.mux.ServeHTTP(probe, r)
+
+			// if mux wants to return 405 (Method Not Allowed), let it handle the request
+			// to preserve the proper 405 response and Allow header
+			if probe.status == http.StatusMethodNotAllowed {
+				b.mux.ServeHTTP(w, r)
+				return
+			}
+
+			// it's a true 404, use custom handler
 			root.notFound.ServeHTTP(w, r)
 			return
 		}
@@ -307,3 +319,21 @@ func (b *Bundle) wrapGlobal(handler http.Handler) http.Handler {
 
 // lockRoot marks this bundle as having registered routes.
 func (b *Bundle) lockRoot() { b.routesLocked = true }
+
+// statusRecorder is a minimal ResponseWriter that only records the status code.
+// Used to probe what status the mux would return without actually writing a response.
+type statusRecorder struct {
+	status int
+}
+
+func (r *statusRecorder) Header() http.Header {
+	return make(http.Header)
+}
+
+func (r *statusRecorder) Write([]byte) (int, error) {
+	return 0, nil
+}
+
+func (r *statusRecorder) WriteHeader(status int) {
+	r.status = status
+}
