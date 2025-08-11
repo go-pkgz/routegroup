@@ -185,7 +185,9 @@ func (b *Bundle) Handler(r *http.Request) (h http.Handler, pattern string) {
 // Deprecated: now a no-op retained for API compatibility.
 func (b *Bundle) DisableNotFoundHandler() {}
 
-// NotFoundHandler sets a custom handler for the root path if no / route is registered.
+// NotFoundHandler sets a custom handler for any unmatched routes (404 responses).
+// Note: This handler is only used for true 404s. Requests to valid paths with
+// incorrect HTTP methods will still return 405 Method Not Allowed with Allow header.
 func (b *Bundle) NotFoundHandler(handler http.HandlerFunc) {
 	// always set on the root bundle so custom 404 works regardless of which bundle serves.
 	if b.root != nil {
