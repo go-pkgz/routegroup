@@ -237,39 +237,39 @@ func TestNotFoundHandlerOnMountedGroup(t *testing.T) {
 func TestStatusRecorderWith200Default(t *testing.T) {
 	// test that statusRecorder correctly identifies handlers that return 200 without explicit WriteHeader
 	group := routegroup.New(http.NewServeMux())
-	
+
 	// set custom NotFound handler
 	group.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
 		http.Error(w, "Custom 404", http.StatusNotFound)
 	})
-	
+
 	// register a handler that returns 200 without calling WriteHeader explicitly
 	// this is common practice - handlers often just call Write() which implicitly sets 200
 	group.HandleFunc("GET /implicit200", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte("success")) // no WriteHeader call, should be 200
 	})
-	
+
 	testServer := httptest.NewServer(group)
 	defer testServer.Close()
-	
+
 	// test that the handler works correctly and isn't mistaken for a 404
 	resp, err := http.Get(testServer.URL + "/implicit200")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	
+
 	body, _ := io.ReadAll(resp.Body)
-	
+
 	// this should return 200 with "success" body
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
-	
+
 	if string(body) != "success" {
 		t.Errorf("expected body 'success', got %q", string(body))
 	}
-	
+
 	// verify it didn't trigger the custom 404 handler
 	if string(body) == "Custom 404\n" {
 		t.Error("custom 404 handler was incorrectly triggered for a valid 200 response")

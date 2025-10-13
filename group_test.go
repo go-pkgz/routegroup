@@ -231,8 +231,84 @@ func TestGroupRoute(t *testing.T) {
 		if allow := recorder.Header().Get("Allow"); allow != http.MethodPost {
 			t.Errorf("expected Allow header to be POST, got %q", allow)
 		}
-		if header := recorder.Header().Get("X-Test-Middleware"); header != "true" {
-			t.Errorf("Expected header X-Test-Middleware to be 'true', got '%s'", header)
+		// with auto-wrapping, middleware is in a sub-group and doesn't apply to 405s
+		if header := recorder.Header().Get("X-Test-Middleware"); header != "" {
+			t.Errorf("Expected header X-Test-Middleware to be empty for 405 (group middleware), got '%s'", header)
+		}
+	})
+}
+
+func TestGroupRouteAutoWrapping(t *testing.T) {
+	// test that calling Route on root bundle auto-creates a group
+	router := routegroup.New(http.NewServeMux())
+
+	// add middleware to router first
+	router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Root-Middleware", "true")
+			next.ServeHTTP(w, r)
+		})
+	})
+
+	// calling Route on root should auto-create a group
+	router.Route(func(g *routegroup.Bundle) {
+		g.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("X-Group-Middleware", "true")
+				next.ServeHTTP(w, r)
+			})
+		})
+		g.HandleFunc("/grouped", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("grouped handler"))
+		})
+	})
+
+	// add another route directly to root
+	router.HandleFunc("/root", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("root handler"))
+	})
+
+	t.Run("grouped route has both middlewares", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/grouped", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		router.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if body := recorder.Body.String(); body != "grouped handler" {
+			t.Errorf("Expected body 'grouped handler', got '%s'", body)
+		}
+		if header := recorder.Header().Get("X-Root-Middleware"); header != "true" {
+			t.Errorf("Expected X-Root-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-Group-Middleware"); header != "true" {
+			t.Errorf("Expected X-Group-Middleware to be 'true', got '%s'", header)
+		}
+	})
+
+	t.Run("root route only has root middleware", func(t *testing.T) {
+		recorder := httptest.NewRecorder()
+		request, err := http.NewRequest(http.MethodGet, "/root", http.NoBody)
+		if err != nil {
+			t.Fatal(err)
+		}
+		router.ServeHTTP(recorder, request)
+
+		if recorder.Code != http.StatusOK {
+			t.Errorf("Expected status code %d, got %d", http.StatusOK, recorder.Code)
+		}
+		if body := recorder.Body.String(); body != "root handler" {
+			t.Errorf("Expected body 'root handler', got '%s'", body)
+		}
+		if header := recorder.Header().Get("X-Root-Middleware"); header != "true" {
+			t.Errorf("Expected X-Root-Middleware to be 'true', got '%s'", header)
+		}
+		if header := recorder.Header().Get("X-Group-Middleware"); header != "" {
+			t.Errorf("Expected X-Group-Middleware to be empty, got '%s'", header)
 		}
 	})
 }
