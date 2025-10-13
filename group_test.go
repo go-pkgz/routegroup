@@ -478,6 +478,19 @@ func TestUseAfterRoutesPanicsAndParentAllowed(t *testing.T) {
 		router.Use(testMiddleware)
 	})
 
+	t.Run("root: Use after Route() with auto-wrap panics", func(t *testing.T) {
+		router := routegroup.New(http.NewServeMux())
+		router.Route(func(b *routegroup.Bundle) {
+			b.HandleFunc("/test", func(w http.ResponseWriter, _ *http.Request) {})
+		})
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatalf("expected panic on root.Use after Route() registered routes")
+			}
+		}()
+		router.Use(testMiddleware)
+	})
+
 	t.Run("parent: Use after child routes is allowed", func(t *testing.T) {
 		router := routegroup.New(http.NewServeMux())
 		child := router.Group()

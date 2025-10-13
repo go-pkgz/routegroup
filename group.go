@@ -231,7 +231,12 @@ func (b *Bundle) register(pattern string, handler http.HandlerFunc) {
 func (b *Bundle) Route(configureFn func(*Bundle)) {
 	// if called on root bundle, auto-create a group for better UX
 	if b.root == nil {
-		b.Group().Route(configureFn)
+		child := b.Group()
+		configureFn(child)
+		// if child registered routes, lock root too to prevent Use() after routes
+		if child.routesLocked {
+			b.routesLocked = true
+		}
 		return
 	}
 	configureFn(b)
