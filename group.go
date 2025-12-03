@@ -182,6 +182,7 @@ func (b *Bundle) Handler(r *http.Request) (h http.Handler, pattern string) {
 }
 
 // DisableNotFoundHandler used to disable auto-registration of a catch-all 404.
+//
 // Deprecated: now a no-op retained for API compatibility.
 func (b *Bundle) DisableNotFoundHandler() {}
 
