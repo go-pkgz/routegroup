@@ -800,9 +800,9 @@ func TestHandleRoot(t *testing.T) {
 		}
 		defer resp.Body.Close()
 
-		// verify trailing slash approach causes redirect
-		if resp.StatusCode != http.StatusMovedPermanently {
-			t.Errorf("expected redirect status 301, got %d", resp.StatusCode)
+		// verify trailing slash approach causes redirect, newer stdlib returns 307 here instead of 301
+		if resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusTemporaryRedirect {
+			t.Errorf("expected redirect status 301 or 307, got %d", resp.StatusCode)
 		}
 
 		location := resp.Header.Get("Location")
