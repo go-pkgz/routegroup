@@ -6,7 +6,7 @@
 ## Features
 
 - Simple and intuitive API for route grouping and route mounting.
-- Lightweight, just about 100 LOC
+- Lightweight, contained in a single file
 - Easy middleware integration for individual routes or groups of routes.
 - Seamless integration with Go's standard `http.ServeMux`.
 - Fully compatible with the `http.Handler` interface and can be used as a drop-in replacement for `http.ServeMux`.
