@@ -4,6 +4,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/go-pkgz/routegroup"
@@ -399,4 +400,96 @@ func TestCustomNotFoundVsMethodNotAllowed(t *testing.T) {
 			t.Errorf("expected custom 404 body, got %q", string(body))
 		}
 	})
+}
+
+func TestCustomNotFoundPreservesCleanupRedirect(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+	}{
+		{name: "dot segments", path: "/a/../x"},
+		{name: "repeated slashes", path: "/a//x"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			makeBundle := func(customNotFound bool) *routegroup.Bundle {
+				bundle := routegroup.New(http.NewServeMux())
+				bundle.HandleFunc("GET /x", func(http.ResponseWriter, *http.Request) {})
+				bundle.HandleFunc("GET /a/x", func(http.ResponseWriter, *http.Request) {})
+				if customNotFound {
+					bundle.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+						http.Error(w, "custom not found", http.StatusNotFound)
+					})
+				}
+				return bundle
+			}
+
+			baseline := httptest.NewRecorder()
+			makeBundle(false).ServeHTTP(baseline, httptest.NewRequest(http.MethodPost, tt.path, http.NoBody))
+			if baseline.Code < http.StatusMultipleChoices || baseline.Code >= http.StatusBadRequest {
+				t.Fatalf("baseline status = %d, want redirect", baseline.Code)
+			}
+
+			withCustomNotFound := httptest.NewRecorder()
+			makeBundle(true).ServeHTTP(withCustomNotFound, httptest.NewRequest(http.MethodPost, tt.path, http.NoBody))
+
+			if withCustomNotFound.Code != baseline.Code {
+				t.Errorf("status = %d, want baseline status %d", withCustomNotFound.Code, baseline.Code)
+			}
+			if got, want := withCustomNotFound.Header().Get("Location"), baseline.Header().Get("Location"); got != want {
+				t.Errorf("Location = %q, want baseline Location %q", got, want)
+			}
+		})
+	}
+}
+
+func TestCustomNotFoundAfterPathRewrite(t *testing.T) {
+	bundle := routegroup.New(http.NewServeMux())
+	bundle.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.URL.Path = strings.TrimSuffix(r.URL.Path, "/")
+			next.ServeHTTP(w, r)
+		})
+	})
+	bundle.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "custom not found", http.StatusNotFound)
+	})
+
+	called := 0
+	bundle.HandleFunc("POST /orders", func(w http.ResponseWriter, _ *http.Request) {
+		called++
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte("created"))
+	})
+
+	rec := httptest.NewRecorder()
+	bundle.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/orders/", http.NoBody))
+
+	if called != 1 {
+		t.Errorf("handler called %d times, want 1", called)
+	}
+	if rec.Code != http.StatusCreated {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusCreated)
+	}
+	if rec.Body.String() != "created" {
+		t.Errorf("body = %q, want %q", rec.Body.String(), "created")
+	}
+}
+
+func TestCustomNotFoundPreservesOuterPathValues(t *testing.T) {
+	bundle := routegroup.New(http.NewServeMux())
+	bundle.NotFoundHandler(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(r.PathValue("rest")))
+	})
+
+	outer := http.NewServeMux()
+	outer.Handle("/app/{rest...}", bundle)
+
+	rec := httptest.NewRecorder()
+	outer.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/app/missing/page", http.NoBody))
+
+	if rec.Body.String() != "missing/page" {
+		t.Errorf("path value = %q, want %q", rec.Body.String(), "missing/page")
+	}
 }

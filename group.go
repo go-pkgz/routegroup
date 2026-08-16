@@ -63,14 +63,19 @@ func (b *Bundle) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// but intercept 404s to use custom handler if provided
 	muxHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if pattern == "" && root.notFound != nil {
-			// no route matched, need to check if it's a true 404 or a 405
-			// probe the mux to see what status it would return
-			probe := &statusRecorder{status: http.StatusOK}
-			b.mux.ServeHTTP(probe, r)
+			handler, currentPattern := b.mux.Handler(r)
+			if currentPattern != "" {
+				b.mux.ServeHTTP(w, r)
+				return
+			}
 
-			// if mux wants to return 405 (Method Not Allowed), let it handle the request
-			// to preserve the proper 405 response and Allow header
-			if probe.status == http.StatusMethodNotAllowed {
+			// no route matched, need to check if it's a true 404
+			// probe the synthetic handler to see what status it would return
+			probe := &statusRecorder{status: http.StatusOK}
+			handler.ServeHTTP(probe, r)
+
+			// let the mux handle redirects and method mismatches
+			if probe.status != http.StatusNotFound {
 				b.mux.ServeHTTP(w, r)
 				return
 			}
