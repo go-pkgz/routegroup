@@ -145,6 +145,9 @@ func (b *Bundle) Handle(pattern string, handler http.Handler) {
 	// for file server paths (ending with /), preserve the pattern as-is
 	if strings.HasSuffix(pattern, "/") {
 		fullPath := b.basePath + pattern
+		if matches := reGo122.FindStringSubmatch(pattern); len(matches) > 2 {
+			fullPath = matches[1] + " " + b.basePath + matches[2]
+		}
 		b.mux.Handle(fullPath, b.wrapMiddleware(handler))
 		return
 	}

@@ -337,6 +337,98 @@ func TestMethodPatternsWithDifferentMethods(t *testing.T) {
 	}
 }
 
+func TestHandleMethodTrailingSlash(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		mounts []string
+		path   string
+	}{
+		{name: "root", path: "/files/"},
+		{name: "mounted root", mounts: []string{"/api"}, path: "/"},
+		{name: "mounted subtree", mounts: []string{"/api"}, path: "/files/"},
+		{name: "nested subtree", mounts: []string{"/api", "/v1"}, path: "/files/"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					t.Fatalf("registering method subtree panicked: %v", recovered)
+				}
+			}()
+			router := routegroup.New(http.NewServeMux())
+			router.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Add("X-Root", "applied")
+					next.ServeHTTP(w, r)
+				})
+			})
+			group := router.Group()
+			for _, mount := range tt.mounts {
+				group = group.Mount(mount)
+			}
+			group.Use(func(next http.Handler) http.Handler {
+				return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Add("X-Group", "applied")
+					next.ServeHTTP(w, r)
+				})
+			})
+			base := strings.Join(tt.mounts, "") + tt.path
+			pattern := "GET " + base
+			group.Handle("GET "+tt.path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				_, _ = w.Write([]byte(r.Pattern))
+			}))
+			group.HandleFunc("GET "+tt.path+"specific", func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("specific"))
+			})
+			mux := http.NewServeMux()
+			mux.Handle(pattern, http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+			redirect := httptest.NewRecorder()
+			mux.ServeHTTP(redirect, httptest.NewRequest(http.MethodGet, strings.TrimSuffix(base, "/"), http.NoBody))
+
+			for _, request := range []struct {
+				method string
+				path   string
+				status int
+				body   string
+			}{
+				{http.MethodGet, base, http.StatusOK, pattern},
+				{http.MethodGet, base + "child", http.StatusOK, pattern},
+				{http.MethodHead, base + "child", http.StatusOK, pattern},
+				{http.MethodGet, base + "specific", http.StatusOK, "specific"},
+				{http.MethodPost, base + "child", http.StatusMethodNotAllowed, ""},
+				{http.MethodGet, strings.TrimSuffix(base, "/"), redirect.Code, ""},
+				{http.MethodGet, "/missing", http.StatusNotFound, ""},
+			} {
+				t.Run(request.method+" "+request.path, func(t *testing.T) {
+					recorder := httptest.NewRecorder()
+					router.ServeHTTP(recorder, httptest.NewRequest(request.method, request.path, http.NoBody))
+					if recorder.Code != request.status {
+						t.Fatalf("got status %d, want %d", recorder.Code, request.status)
+					}
+					if request.status == http.StatusOK && recorder.Body.String() != request.body {
+						t.Errorf("got body %q, want %q", recorder.Body.String(), request.body)
+					}
+					if got := recorder.Header().Values("X-Root"); len(got) != 1 {
+						t.Errorf("root middleware ran %d times, want 1", len(got))
+					}
+					wantGroup := 0
+					if request.status == http.StatusOK {
+						wantGroup = 1
+					}
+					if got := recorder.Header().Values("X-Group"); len(got) != wantGroup {
+						t.Errorf("group middleware ran %d times, want %d", len(got), wantGroup)
+					}
+					if request.status == http.StatusMethodNotAllowed && recorder.Header().Get("Allow") != "GET, HEAD" {
+						t.Errorf("got Allow %q, want GET, HEAD", recorder.Header().Get("Allow"))
+					}
+					if request.status == redirect.Code && recorder.Header().Get("Location") != base {
+						t.Errorf("got Location %q, want %q", recorder.Header().Get("Location"), base)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestHandleTrailingSlash(t *testing.T) {
 	router := routegroup.New(http.NewServeMux())
 
