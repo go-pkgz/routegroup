@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-pkgz/routegroup"
@@ -650,4 +651,80 @@ func TestIssue12StaticAndIndex(t *testing.T) {
 			t.Errorf("got %q, want login page", got)
 		}
 	})
+}
+
+func TestHandleFilesMethodPattern(t *testing.T) {
+	dir := t.TempDir()
+	content := "static file content"
+	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name    string
+		mounts  []string
+		pattern string
+		url     string
+	}{
+		{name: "root", pattern: "GET /", url: "/test.txt"},
+		{name: "root prefix", pattern: "GET /static", url: "/static/test.txt"},
+		{name: "root prefix with slash", pattern: "GET /static/", url: "/static/test.txt"},
+		{name: "mounted root", mounts: []string{"/api"}, pattern: "GET /", url: "/api/test.txt"},
+		{name: "mounted prefix", mounts: []string{"/api"}, pattern: "GET /static", url: "/api/static/test.txt"},
+		{name: "nested mount", mounts: []string{"/api", "/v1"}, pattern: "GET /static/", url: "/api/v1/static/test.txt"},
+		{name: "prefix with space", mounts: []string{"/api"}, pattern: "GET /my files", url: "/api/my%20files/test.txt"},
+		{name: "no method", mounts: []string{"/api"}, pattern: "/static", url: "/api/static/test.txt"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				if recovered := recover(); recovered != nil {
+					t.Fatalf("registering file server panicked: %v", recovered)
+				}
+			}()
+			router := routegroup.New(http.NewServeMux())
+			group := router
+			for _, mount := range tt.mounts {
+				group = group.Mount(mount)
+			}
+			group.HandleFiles(tt.pattern, http.Dir(dir))
+
+			serve := func(method string) *httptest.ResponseRecorder {
+				rec := httptest.NewRecorder()
+				router.ServeHTTP(rec, httptest.NewRequest(method, tt.url, http.NoBody))
+				return rec
+			}
+
+			get := serve(http.MethodGet)
+			if get.Code != http.StatusOK {
+				t.Fatalf("GET %s: got status %d, want %d", tt.url, get.Code, http.StatusOK)
+			}
+			if get.Body.String() != content {
+				t.Errorf("GET %s: got body %q, want %q", tt.url, get.Body.String(), content)
+			}
+
+			head := serve(http.MethodHead)
+			if head.Code != http.StatusOK {
+				t.Errorf("HEAD %s: got status %d, want %d", tt.url, head.Code, http.StatusOK)
+			}
+			if head.Body.Len() != 0 {
+				t.Errorf("HEAD %s: got body %q, want empty", tt.url, head.Body.String())
+			}
+			if got, want := head.Header().Get("Content-Length"), fmt.Sprint(len(content)); got != want {
+				t.Errorf("HEAD %s: got Content-Length %q, want %q", tt.url, got, want)
+			}
+
+			if !strings.HasPrefix(tt.pattern, "GET ") {
+				return
+			}
+			post := serve(http.MethodPost)
+			if post.Code != http.StatusMethodNotAllowed {
+				t.Errorf("POST %s: got status %d, want %d", tt.url, post.Code, http.StatusMethodNotAllowed)
+			}
+			if got := post.Header().Get("Allow"); got != "GET, HEAD" {
+				t.Errorf("POST %s: got Allow %q, want %q", tt.url, got, "GET, HEAD")
+			}
+		})
+	}
 }
