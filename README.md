@@ -243,6 +243,8 @@ usersGroup.HandleRoot("POST", http.HandlerFunc(func(w http.ResponseWriter, r *ht
 }))
 ```
 
+On a bundle without a base path, such as the one returned by `routegroup.New`, `HandleRoot` and `HandleRootFunc` handle the exact root `/` only, so requests to unknown paths still get a 404 response or the custom `NotFoundHandler`.
+
 While it's also possible to handle such paths using a trailing slash pattern (`"/"`) with the regular `Handle` or `HandleFunc` methods, that approach results in a redirect from non-trailing slash URLs (e.g., `/api`) to the trailing slash version (e.g., `/api/`). The `HandleRoot` method avoids this redirect, providing a more direct response and avoiding an extra round-trip, which is especially important for non-GET requests or when clients don't automatically follow redirects.
 
 ### Using derived groups
