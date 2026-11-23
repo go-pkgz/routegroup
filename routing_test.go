@@ -874,6 +874,34 @@ func TestHandleRoot(t *testing.T) {
 		}
 	})
 
+	t.Run("HandleRoot with empty base path matches only the root", func(t *testing.T) {
+		group := routegroup.New(http.NewServeMux())
+		group.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "custom not found", http.StatusNotFound)
+		})
+		group.HandleRoot("GET", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("root"))
+		}))
+		group.HandleRoot("", http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("any method root"))
+		}))
+		assertExactRoot(t, group)
+	})
+
+	t.Run("HandleRootFunc with empty base path matches only the root", func(t *testing.T) {
+		group := routegroup.New(http.NewServeMux())
+		group.NotFoundHandler(func(w http.ResponseWriter, _ *http.Request) {
+			http.Error(w, "custom not found", http.StatusNotFound)
+		})
+		group.HandleRootFunc("GET", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("root"))
+		})
+		group.HandleRootFunc("", func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("any method root"))
+		})
+		assertExactRoot(t, group)
+	})
+
 	t.Run("handle with trailing slash", func(t *testing.T) {
 		group := routegroup.New(http.NewServeMux())
 		apiGroup := group.Mount("/api")
@@ -1008,3 +1036,25 @@ func ExampleBundle_HandleRoot() {
 }
 
 // TestPathParametersWithMount tests path parameter extraction with mounted groups (issue #22)
+
+// assertExactRoot checks that a root handler registered with an empty base path
+// answers the root only and leaves every other path to the not-found handler.
+func assertExactRoot(t *testing.T, h http.Handler) {
+	t.Helper()
+	tests := []struct {
+		method, path, body string
+		code               int
+	}{
+		{http.MethodGet, "/", "root", http.StatusOK},
+		{http.MethodPost, "/", "any method root", http.StatusOK},
+		{http.MethodGet, "/nothing", "custom not found\n", http.StatusNotFound},
+		{http.MethodPost, "/nothing", "custom not found\n", http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, httptest.NewRequest(tt.method, tt.path, http.NoBody))
+		if rec.Code != tt.code || rec.Body.String() != tt.body {
+			t.Errorf("%s %s: got %d %q, want %d %q", tt.method, tt.path, rec.Code, rec.Body.String(), tt.code, tt.body)
+		}
+	}
+}
