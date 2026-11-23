@@ -160,7 +160,7 @@ Native mux responses: `routegroup` applies root-level middlewares to all request
 
 - Call `Use(...)` before registering routes on the same bundle. Calling `Use` after any handler has been registered on that bundle will panic with a descriptive error.
 - Root bundle middlewares (added via `router.Use(...)`) are applied globally to all requests at serve time.
-- Root bundle middlewares see the matched route pattern in `r.Pattern`, but they run before `http.ServeMux` fills in path values, so `r.PathValue(...)` does not return the route's path values there. Group middlewares see both.
+- Root bundle middlewares see the matched route pattern in `r.Pattern`, but they run before `http.ServeMux` fills in path values, so `r.PathValue(...)` is empty there until they call `next.ServeHTTP`. Group middlewares see both.
 - When `Route` is called on the root bundle, routes registered directly on the bundle passed to its function lock the root bundle, so a later `router.Use(...)` panics. Routes registered on a bundle from `router.Group()` or `router.Mount(...)`, or on one derived inside the function with `With`, `Group` or `Mount`, do not lock it.
 - Group/bundle middlewares (added via `group.Use(...)`) apply to the routes registered on that bundle and its descendants, provided they are added before those routes.
 - `With(...)` returns a new bundle; you can add middlewares there first, then register routes. This is the preferred way to add scoped middlewares without affecting previously defined routes.
