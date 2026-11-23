@@ -62,7 +62,7 @@ Pass the bundle, not the mux it was built on, to the server:
     http.ListenAndServe(":8080", group)
 ```
 
-Root bundle middlewares run inside the bundle's `ServeHTTP`, so serving the `mux` directly skips them without any error. The same applies to the bundle returned by the package-level `routegroup.Mount(mux, "/api")`: it is a separate root bundle, and its `Use` middlewares run only when that bundle is the handler being served.
+Root bundle middlewares run inside the bundle's `ServeHTTP`, so serving the `mux` directly skips them without any error. The same applies to the bundle returned by the package-level `routegroup.Mount(mux, "/api")`: it is a separate root bundle, and its `Use` middlewares run only when that bundle, or one derived from it, is the handler being served.
 
 **Complete Example**
 
@@ -257,6 +257,8 @@ usersGroup.HandleRoot("POST", http.HandlerFunc(func(w http.ResponseWriter, r *ht
 An empty method, as in `HandleRoot("", handler)`, registers the handler for every HTTP method.
 
 On a bundle without a base path, such as the one returned by `routegroup.New`, `HandleRoot` and `HandleRootFunc` handle the exact root `/` only, so requests to unknown paths still get a 404 response or the custom `NotFoundHandler`.
+
+Because that pattern overlaps a catch-all for the same method, `HandleRoot("", landing)` together with `Handle("GET /", spa)` on the same bundle panics at registration. To keep the routing of earlier versions, where `HandleRoot` on such a bundle was a catch-all, replace `HandleRoot("", landing)` with `Handle("/", landing)` on the same bundle.
 
 While it's also possible to handle such paths using a trailing slash pattern (`"/"`) with the regular `Handle` or `HandleFunc` methods, that approach results in a redirect from non-trailing slash URLs (e.g., `/api`) to the trailing slash version (e.g., `/api/`). The `HandleRoot` method avoids this redirect, providing a more direct response and avoiding an extra round-trip, which is especially important for non-GET requests or when clients don't automatically follow redirects.
 
